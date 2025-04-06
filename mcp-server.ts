@@ -4,7 +4,12 @@ import {
 } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 
-import { EditorData, Resource, data } from "@wonderlandengine/editor-api";
+import {
+  EditorData,
+  Resource,
+  data,
+  tools,
+} from "@wonderlandengine/editor-api";
 import { randomUUID } from "crypto";
 
 import express, { Request, Response } from "express";
@@ -118,30 +123,55 @@ server.tool(
   modifyObjectsSchema,
   async ({ modifications }) => {
     try {
-      Promise.all(
+      await queue!.push(() => {
         modifications.map(({ position, rotation, scaling, id, name }) => {
           id = id ?? randomUUID();
+          const o = data.objects[id];
 
-          return queue!.push(() => {
-            if (name) data.objects[id].name = name;
-            if (position) data.objects[id].translation = position;
-            if (rotation) data.objects[id].rotation = rotation;
-            if (scaling) data.objects[id].scaling = scaling;
-          });
-        })
-      );
+          if (name) o.name = name;
+          if (position) o.translation = position;
+          if (rotation) o.rotation = rotation;
+          if (scaling) o.scaling = scaling;
+        });
+      });
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Done.`,
-          },
-        ],
-      };
+      return { content: [{ type: "text", text: "Done." }] };
     } catch (error: any) {
-      console.error("Validation error:", error);
-      console.error("Validation error:", error.errors);
+      console.error("Validation errors:", error, error?.errors ?? "");
+      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+    }
+  }
+);
+
+const importSceneFilesSchema = {
+  imports: z
+    .object({
+      path: z.string(),
+      parentId: z
+        .string()
+        .describe(
+          "ID of the parent to parent to, leave empty to import at root."
+        )
+        .optional(),
+    })
+    .array(),
+};
+
+server.tool(
+  "import_files",
+  "Import scene files by path.",
+  importSceneFilesSchema,
+  async ({ imports }) => {
+    try {
+      await queue!.push(() => {
+        imports.map(({ path, parentId }) => {
+          tools.loadScene(path, { parent: parentId });
+        });
+      });
+
+      return { content: [{ type: "text", text: "Done." }] };
+    } catch (error: any) {
+      console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
     }
   }
