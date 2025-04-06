@@ -1,14 +1,3 @@
-#!/usr/bin/env node
-
-/**
- * This is a template MCP server that implements a simple notes system.
- * It demonstrates core MCP concepts like resources and tools by allowing:
- * - Listing notes as resources
- * - Reading individual notes
- * - Creating new notes via a tool
- * - Summarizing all notes via a prompt
- */
-
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
@@ -48,10 +37,6 @@ export class WorkQueue {
 
 let queue: WorkQueue | null = null;
 
-/**
- * Create an MCP server with capabilities for resources (to list/read notes),
- * tools (to create new notes), and prompts (to summarize notes).
- */
 const server = new Server(
   {
     name: "wonderland-editor-mcp",
@@ -66,13 +51,6 @@ const server = new Server(
   }
 );
 
-/**
- * Handler for listing available notes as resources.
- * Each note is exposed as a resource with:
- * - A note:// URI scheme
- * - Plain text MIME type
- * - Human readable name and description (now including the note title)
- */
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
   return {
     resources: Object.entries(data.objects).map(([id, o]) => ({
@@ -84,17 +62,13 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
   };
 });
 
-/**
- * Handler for reading the contents of a specific note.
- * Takes a note:// URI and returns the note content as plain text.
- */
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const url = new URL(request.params.uri);
   const id = url.pathname.replace(/^\//, "");
-  const note = null; // TODO
+  const object = data.objects[id] || null;
 
-  if (!note) {
-    throw new Error(`Note ${id} not found`);
+  if (!object) {
+    throw new Error(`Object ${id} not found`);
   }
 
   return {
@@ -102,7 +76,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       {
         uri: request.params.uri,
         mimeType: "text/plain",
-        text: "not found",
+        text: JSON.stringify(object),
       },
     ],
   };
@@ -117,10 +91,6 @@ const createObjectSchema = z.object({
     .describe("Array of three numbers for position"),
 });
 
-/**
- * Handler that lists available tools.
- * Exposes a single "create_note" tool that lets clients create new notes.
- */
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
@@ -146,10 +116,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
-/**
- * Handler for the create_note tool.
- * Creates a new note with the provided title and content, and returns success message.
- */
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   switch (request.params.name) {
     case "create_object": {
