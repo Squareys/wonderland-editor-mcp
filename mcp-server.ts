@@ -1,16 +1,13 @@
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
-  CallToolRequestSchema,
-  ListResourcesRequestSchema,
-  ListToolsRequestSchema,
-  ReadResourceRequestSchema,
-  ListPromptsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
-import { ObjectResource, data } from "@wonderlandengine/editor-api";
+  McpServer,
+  ResourceTemplate,
+} from "@modelcontextprotocol/sdk/server/mcp.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+
+import { EditorData, Resource, data } from "@wonderlandengine/editor-api";
 import { randomUUID } from "crypto";
 
-import express from "express";
+import express, { Request, Response } from "express";
 import { z } from "zod";
 
 export class WorkQueue {
@@ -37,9 +34,9 @@ export class WorkQueue {
 
 let queue: WorkQueue | null = null;
 
-const server = new Server(
+const server = new McpServer(
   {
-    name: "wonderland-editor-mcp",
+    name: "Wonderland Editor",
     version: "0.1.0",
   },
   {
@@ -51,128 +48,124 @@ const server = new Server(
   }
 );
 
-server.setRequestHandler(ListResourcesRequestSchema, async () => {
-  return {
-    resources: Object.entries(data.objects).map(([id, o]) => ({
-      uri: `object:///${id}`,
-      mimeType: "text/plain",
-      name: o.name,
-      description: `A text note: ${o.name}`,
-    })),
-  };
-});
-
-server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-  const url = new URL(request.params.uri);
-  const id = url.pathname.replace(/^\//, "");
-  const object = data.objects[id] || null;
-
-  if (!object) {
-    throw new Error(`Object ${id} not found`);
-  }
-
-  return {
-    contents: [
-      {
-        uri: request.params.uri,
-        mimeType: "text/plain",
-        text: JSON.stringify(object),
-      },
-    ],
-  };
-});
-
-const createObjectSchema = z.object({
-  name: z.string().describe("Name for the object"),
-  position: z
-    .number()
-    .array()
-    .length(3)
-    .describe("Array of three numbers for position"),
-});
-
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
-      {
-        name: "create_object",
-        description: "Create a new object in the Wonderland Engine project",
-        inputSchema: {
-          type: "object",
-          properties: {
-            name: {
-              type: "string",
-              description: "Name for the object",
-            },
-            position: {
-              type: "array",
-              description: "Array of three numbers for position",
-            },
-          },
-          required: ["name", "position"],
-        },
-      },
-    ],
-  };
-});
-
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  switch (request.params.name) {
-    case "create_object": {
-      try {
-        const parsedArgs = createObjectSchema.parse(request.params.arguments);
-        const name = parsedArgs.name;
-        const position = parsedArgs.position;
-        const id = randomUUID();
-        await queue!.push(() => {
-          data.objects[id] = {
-            name,
-            translation: position,
-          } as ObjectResource;
-        });
-
+Object.keys(data).forEach((resourceType) => {
+  server.resource(
+    resourceType,
+    new ResourceTemplate(`${resourceType}:///{id}`, {
+      list: () => {
         return {
-          content: [
-            {
-              type: "text",
-              text: `Created object ${id}: ${name}`,
-            },
-          ],
+          resources: Object.entries(
+            //@ts-ignore
+            data[resourceType as keyof EditorData]
+          ).map(([id, r]) => ({
+            uri: `${resourceType}://${id}`,
+            mimeType: "text/plain",
+            name: (r as Resource).name,
+          })),
         };
-      } catch (error: any) {
-        console.error("Validation error:", error.errors);
-        throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
-      }
-    }
-
-    default:
-      throw new Error("Unknown tool");
-  }
-});
-
-server.setRequestHandler(ListPromptsRequestSchema, async () => {
-  return {
-    prompts: [
-      {
-        name: "summarize_notes",
-        description: "Summarize all notes",
       },
-    ],
-  };
+    }),
+    async (uri, { id }) => {
+      // @ts-ignore
+      const resource = data[resourceType][id] || null;
+      if (!resource) {
+        throw new Error(`Resource ${uri} not found`);
+      }
+
+      return {
+        contents: [
+          {
+            uri: uri.toString(),
+            mimeType: "text/plain",
+            text: JSON.stringify(resource),
+          },
+        ],
+      };
+    }
+  );
 });
+
+const modifyObjectsSchema = {
+  modifications: z
+    .object({
+      name: z.string().describe("Name for the object").optional(),
+      id: z.string().describe("ID of the object").optional(),
+      position: z
+        .number()
+        .array()
+        .length(3)
+        .describe("Array of three numbers for position")
+        .optional(),
+      rotation: z
+        .number()
+        .array()
+        .length(4)
+        .describe("Array of four numbers for rotation quaternion")
+        .optional(),
+      scaling: z
+        .number()
+        .array()
+        .length(3)
+        .describe("Array of three numbers for scaling")
+        .optional(),
+    })
+    .array(),
+};
+
+server.tool(
+  "modify_objects",
+  "Create or modify an objects in the Wonderland Engine project.",
+  modifyObjectsSchema,
+  async ({ modifications }) => {
+    try {
+      Promise.all(
+        modifications.map(({ position, rotation, scaling, id, name }) => {
+          id = id ?? randomUUID();
+
+          return queue!.push(() => {
+            if (name) data.objects[id].name = name;
+            if (position) data.objects[id].translation = position;
+            if (rotation) data.objects[id].rotation = rotation;
+            if (scaling) data.objects[id].scaling = scaling;
+          });
+        })
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Done.`,
+          },
+        ],
+      };
+    } catch (error: any) {
+      console.error("Validation error:", error);
+      console.error("Validation error:", error.errors);
+      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+    }
+  }
+);
 
 const app = express();
+const transports: { [sessionId: string]: SSEServerTransport } = {};
 
-let transport: SSEServerTransport | null = null;
-
-app.get("/sse", (req, res) => {
-  transport = new SSEServerTransport("/messages", res);
-  server.connect(transport);
+app.get("/sse", async (_: Request, res: Response) => {
+  const transport = new SSEServerTransport("/messages", res);
+  transports[transport.sessionId] = transport;
+  res.on("close", () => {
+    delete transports[transport.sessionId];
+  });
+  await server.connect(transport);
 });
 
-app.post("/messages", (req, res) => {
+app.post("/messages", async (req: Request, res: Response) => {
+  const sessionId = req.query.sessionId as string;
+  const transport = transports[sessionId];
   if (transport) {
-    transport.handlePostMessage(req, res);
+    await transport.handlePostMessage(req, res);
+  } else {
+    res.status(400).send("No transport found for sessionId");
   }
 });
 

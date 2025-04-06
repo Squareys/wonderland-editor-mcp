@@ -23,7 +23,6 @@ export default class Index extends EditorPlugin {
     });
   }
 
-  /* Use this function for drawing UI */
   draw() {
     ui.text(`Status: running, commands run: ${this.commandsCount}.`);
     ui.separator();
