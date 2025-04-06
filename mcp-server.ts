@@ -18,9 +18,35 @@ import {
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { data } from "@wonderlandengine/editor-api";
+import { ObjectResource, data } from "@wonderlandengine/editor-api";
+import { randomUUID } from "crypto";
 
 import express from "express";
+import { z } from "zod";
+
+export class WorkQueue {
+  _queue: { func: () => void; res: () => void; rej: (e: any) => void }[] = [];
+  async push(func: () => void): Promise<void> {
+    return new Promise<void>((res, rej) => {
+      this._queue.push({ func, res, rej });
+    });
+  }
+
+  pop(): boolean {
+    if (this._queue.length == 0) return false;
+    const { func, res, rej } = this._queue.pop()!;
+    try {
+      func();
+      res();
+    } catch (e) {
+      rej(e);
+    }
+
+    return true;
+  }
+}
+
+let queue: WorkQueue | null = null;
 
 /**
  * Create an MCP server with capabilities for resources (to list/read notes),
@@ -82,6 +108,15 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   };
 });
 
+const createObjectSchema = z.object({
+  name: z.string().describe("Name for the object"),
+  position: z
+    .number()
+    .array()
+    .length(3)
+    .describe("Array of three numbers for position"),
+});
+
 /**
  * Handler that lists available tools.
  * Exposes a single "create_note" tool that lets clients create new notes.
@@ -97,12 +132,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             name: {
               type: "string",
-              description: "Title of the note",
+              description: "Name for the object",
             },
             position: {
               type: "array",
-              elementType: "number",
-              description: "Position of the object",
+              description: "Array of three numbers for position",
             },
           },
           required: ["name", "position"],
@@ -119,22 +153,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   switch (request.params.name) {
     case "create_object": {
-      const name = String(request.params.arguments?.name);
-      const position = String(request.params.arguments?.position);
-      if (!name || !position) {
-        throw new Error("Title and content are required");
+      try {
+        const parsedArgs = createObjectSchema.parse(request.params.arguments);
+        const name = parsedArgs.name;
+        const position = parsedArgs.position;
+        const id = randomUUID();
+        await queue!.push(() => {
+          data.objects[id] = {
+            name,
+            translation: position,
+          } as ObjectResource;
+        });
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Created object ${id}: ${name}`,
+            },
+          ],
+        };
+      } catch (error: any) {
+        console.error("Validation error:", error.errors);
+        throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
       }
-
-      const id = "123";
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Created object ${id}: ${name}`,
-          },
-        ],
-      };
     }
 
     default:
@@ -168,8 +210,9 @@ app.post("/messages", (req, res) => {
   }
 });
 
-export async function main({ port }: { port: number }) {
+export async function main(params: { port: number; queue: WorkQueue }) {
+  queue = params.queue;
   return new Promise(() => {
-    app.listen(port);
+    app.listen(params.port);
   });
 }
