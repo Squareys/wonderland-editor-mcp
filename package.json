@@ -11,6 +11,7 @@
     "author": "",
     "license": "ISC",
     "description": "",
+    "wonderlandengine": {},
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.8.0",
         "@types/express": "^5.0.1",
