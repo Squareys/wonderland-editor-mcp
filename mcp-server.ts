@@ -95,6 +95,10 @@ const modifyObjectsSchema = {
     .object({
       name: z.string().describe("Name for the object").optional(),
       id: z.string().describe("ID of the object").optional(),
+      parentId: z
+        .string()
+        .describe("ID of the parent to parent to.")
+        .optional(),
       position: z
         .number()
         .array()
@@ -139,6 +143,7 @@ server.tool(
       await queue!.push(() => {
         modifications.map(
           ({
+            parentId,
             position,
             rotation,
             scaling,
@@ -151,6 +156,7 @@ server.tool(
             const o = data.objects[id];
 
             if (name) o.name = name;
+            if (parentId) o.parent = parentId;
             if (position) o.translation = position;
             if (rotation) o.rotation = rotation;
             if (scaling) o.scaling = scaling;
