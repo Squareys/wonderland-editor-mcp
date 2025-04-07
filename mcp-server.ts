@@ -113,6 +113,19 @@ const modifyObjectsSchema = {
         .length(3)
         .describe("Array of three numbers for scaling")
         .optional(),
+      addComponents: z
+        .object({})
+        .passthrough()
+        .array()
+        .describe(
+          "Components to add to the object, any object in the format {type: string, [type]: {properties}}"
+        )
+        .optional(),
+      removeComponents: z
+        .number()
+        .array()
+        .describe("Indices of components to remove from the object")
+        .optional(),
     })
     .array(),
 };
@@ -124,15 +137,40 @@ server.tool(
   async ({ modifications }) => {
     try {
       await queue!.push(() => {
-        modifications.map(({ position, rotation, scaling, id, name }) => {
-          id = id ?? randomUUID();
-          const o = data.objects[id];
+        modifications.map(
+          ({
+            position,
+            rotation,
+            scaling,
+            id,
+            name,
+            removeComponents,
+            addComponents,
+          }) => {
+            id = id ?? randomUUID();
+            const o = data.objects[id];
 
-          if (name) o.name = name;
-          if (position) o.translation = position;
-          if (rotation) o.rotation = rotation;
-          if (scaling) o.scaling = scaling;
-        });
+            if (name) o.name = name;
+            if (position) o.translation = position;
+            if (rotation) o.rotation = rotation;
+            if (scaling) o.scaling = scaling;
+            if (removeComponents) {
+              removeComponents
+                .sort()
+                .reverse()
+                .forEach((i) => delete o.components[i]);
+            }
+            if (addComponents) {
+              addComponents.forEach((c) => {
+                const index = o.components.length;
+                // @ts-ignore
+                o.components[index].type = c.type!;
+                // @ts-ignore
+                Object.assign(o.components[index][c.type], c[c.type!]);
+              });
+            }
+          }
+        );
       });
 
       return { content: [{ type: "text", text: "Done." }] };
