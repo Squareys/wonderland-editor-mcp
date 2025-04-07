@@ -12,6 +12,7 @@ const CONFIG_EXAMPLE = `    "wonderland-editor-mcp": {
 export default class Index extends EditorPlugin {
   queue!: WorkQueue;
   commandsCount = 0;
+  status = "running";
 
   constructor() {
     super();
@@ -19,7 +20,7 @@ export default class Index extends EditorPlugin {
     this.queue = new WorkQueue();
 
     main({ port: PORT, queue: this.queue }).catch((error) => {
-      console.error("Server error:", error);
+      this.status = "[error]" + error.toString();
     });
   }
 
