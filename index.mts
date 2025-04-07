@@ -1,6 +1,6 @@
 import { EditorPlugin, ui } from "@wonderlandengine/editor-api";
 
-import { WorkQueue, main } from "./mcp-server.js";
+import { WorkQueue, main, shutdown } from "./mcp-server.js";
 
 const PORT = 3000;
 const CONFIG_EXAMPLE = `    "wonderland-editor-mcp": {
@@ -21,6 +21,11 @@ export default class Index extends EditorPlugin {
     main({ port: PORT, queue: this.queue }).catch((error) => {
       console.error("Server error:", error);
     });
+  }
+
+  unload() {
+    /* Shutdown server and allow rebinding the port when reloading */
+    shutdown();
   }
 
   draw() {

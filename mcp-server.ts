@@ -243,3 +243,7 @@ export async function main(params: { port: number; queue: WorkQueue }) {
     app.listen(params.port);
   });
 }
+
+export async function shutdown() {
+  server.close();
+}
