@@ -28,7 +28,35 @@ If you can't use SSE, because your client doesn't support it, you can wrap it li
 
 ```sh
 # Wrap the mcp server via STDIO
-npx -y supergateway --sse "https://localhost:3000"
+npx -y supergateway --sse "http://localhost:3000/sse"
+```
+
+#### Continue
+
+On **Windows**:
+
+```yml
+- name: Wonderland Editor
+  command: cmd
+  args:
+    - /c
+    - npx
+    - -y
+    - supergateway
+    - --sse
+    - http://localhost:3000/sse
+```
+
+Other systems:
+
+```yml
+- name: Wonderland Editor
+  command: npx
+  args:
+    - -y
+    - supergateway
+    - --sse
+    - http://localhost:3000/sse
 ```
 
 ## Features
