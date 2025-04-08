@@ -30,7 +30,8 @@ export default class Index extends EditorPlugin {
   }
 
   draw() {
-    ui.text(`Status: running, commands run: ${this.commandsCount}.`);
+    ui.text(`Status: ${this.status}`);
+    ui.text(`Commands run: ${this.commandsCount}.`);
     ui.separator();
     ui.text(
       "Copy the following config into Cursor\n" +
