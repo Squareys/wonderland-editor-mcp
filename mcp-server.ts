@@ -279,8 +279,15 @@ app.post("/messages", async (req: Request, res: Response) => {
 
 export async function main(params: { port: number; queue: WorkQueue }) {
   queue = params.queue;
-  return new Promise(() => {
-    app.listen(params.port);
+  return new Promise<void>((res, rej) => {
+    try {
+      app.listen(params.port, (error) => {
+        if (error) rej(error);
+      });
+      res();
+    } catch (e) {
+      rej(e);
+    }
   });
 }
 
