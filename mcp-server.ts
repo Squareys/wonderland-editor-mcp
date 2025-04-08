@@ -53,10 +53,24 @@ const server = new McpServer(
   }
 );
 
-Object.keys(data).forEach((resourceType) => {
+[
+  "objects",
+  "textures",
+  "meshes",
+  "materials",
+  "animations",
+  "skins",
+  "images",
+  "shaders",
+  "pipelines",
+  "fonts",
+  "morphTargets",
+  "particleEffects",
+].forEach((resourceType) => {
+  console.log("Set up", resourceType, "resource");
   server.resource(
     resourceType,
-    new ResourceTemplate(`${resourceType}:///{id}`, {
+    new ResourceTemplate(`${resourceType}://{id}`, {
       list: () => {
         return {
           resources: Object.entries(
@@ -72,9 +86,9 @@ Object.keys(data).forEach((resourceType) => {
     }),
     async (uri, { id }) => {
       // @ts-ignore
-      const resource = data[resourceType][id] || null;
+      const resource = data[resourceType][id.toString()];
       if (!resource) {
-        throw new Error(`Resource ${uri} not found`);
+        throw new Error(`${resourceType} resource with id ${id} not found`);
       }
 
       return {
@@ -118,12 +132,22 @@ const modifyObjectsSchema = {
         .describe("Array of three numbers for scaling")
         .optional(),
       addComponents: z
-        .object({})
-        .passthrough()
+        .object({
+          type: z.string(),
+          properties: z.object({}).passthrough(),
+        })
         .array()
         .describe(
           "Components to add to the object, any object in the format {type: string, [type]: {properties}}"
         )
+        .optional(),
+      modifyComponents: z
+        .object({
+          index: z.number(),
+          properties: z.object({}).passthrough(),
+        })
+        .array()
+        .describe("Components to modify on the object.")
         .optional(),
       removeComponents: z
         .number()
@@ -149,8 +173,9 @@ server.tool(
             scaling,
             id,
             name,
-            removeComponents,
             addComponents,
+            modifyComponents,
+            removeComponents,
           }) => {
             id = id ?? randomUUID();
             const o = data.objects[id];
@@ -160,6 +185,16 @@ server.tool(
             if (position) o.translation = position;
             if (rotation) o.rotation = rotation;
             if (scaling) o.scaling = scaling;
+            if (modifyComponents) {
+              modifyComponents.forEach(({ index, properties }) => {
+                if (o.components[index].type == null) return;
+                Object.assign(
+                  // @ts-ignore
+                  o.components[index][o.components[index].type],
+                  properties
+                );
+              });
+            }
             if (removeComponents) {
               removeComponents
                 .sort()
@@ -168,11 +203,10 @@ server.tool(
             }
             if (addComponents) {
               addComponents.forEach((c) => {
-                const index = o.components.length;
+                const index = o.components?.length ?? 0;
+                o.components[index].type = c.type;
                 // @ts-ignore
-                o.components[index].type = c.type!;
-                // @ts-ignore
-                Object.assign(o.components[index][c.type], c[c.type!]);
+                Object.assign(o.components[index][c.type], c.properties);
               });
             }
           }
