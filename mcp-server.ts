@@ -246,9 +246,11 @@ server.tool(
   async ({ imports }) => {
     try {
       await queue!.push(async () => {
-        imports.map(({ path, parentId }) => {
-          tools.loadScene(path, { parent: parentId });
-        });
+        await Promise.all(
+          imports.map(({ path, parentId }) => {
+            return tools.loadScene(path, { parent: parentId });
+          })
+        );
       });
 
       return { content: [{ type: "text", text: "Done." }] };
