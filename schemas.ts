@@ -40,6 +40,10 @@ export const queryResourcesSchema = {
     .optional(),
 };
 
+export const deleteObjectsSchema = {
+  objectIds: z.string().array(),
+};
+
 export const modifyObjectsSchema = {
   modifications: z
     .object({

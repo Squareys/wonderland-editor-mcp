@@ -14,6 +14,7 @@ import { randomUUID } from "crypto";
 import {
   ResourceTypes,
   computeMeshBoundsSchema,
+  deleteObjectsSchema,
   importFilesSchema,
   importSceneFilesSchema,
   modifyObjectsSchema,
@@ -129,6 +130,28 @@ server.tool(
           type: "text",
           text: JSON.stringify(res),
         })),
+      };
+    } catch (error: any) {
+      console.error("Validation errors:", error, error?.errors ?? "");
+      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+    }
+  }
+);
+
+server.tool(
+  "delete_objects",
+  "Delete objects.",
+  deleteObjectsSchema,
+  async ({ objectIds }) => {
+    try {
+      await queue!.push(async () => {
+        objectIds.map((objectId) => {
+          delete data.objects[objectId];
+        });
+      });
+
+      return {
+        content: [{ type: "text", text: "Done." }],
       };
     } catch (error: any) {
       console.error("Validation errors:", error, error?.errors ?? "");
