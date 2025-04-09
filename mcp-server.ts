@@ -2,44 +2,24 @@ import {
   McpServer,
   ResourceTemplate,
 } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-
 import {
   EditorData,
   Resource,
   data,
   tools,
 } from "@wonderlandengine/editor-api";
+
+import { WorkQueue } from "./utils/work-queue.js";
 import { randomUUID } from "crypto";
+import {
+  ResourceTypes,
+  importFilesSchema,
+  importSceneFilesSchema,
+  modifyObjectsSchema,
+  queryResourcesSchema,
+} from "./schemas.js";
 
-import express, { Request, Response } from "express";
-import { z } from "zod";
-
-export class WorkQueue {
-  _queue: { func: () => void; res: () => void; rej: (e: any) => void }[] = [];
-  async push(func: () => void): Promise<void> {
-    return new Promise<void>((res, rej) => {
-      this._queue.push({ func, res, rej });
-    });
-  }
-
-  pop(): boolean {
-    if (this._queue.length == 0) return false;
-    const { func, res, rej } = this._queue.pop()!;
-    try {
-      func();
-      res();
-    } catch (e) {
-      rej(e);
-    }
-
-    return true;
-  }
-}
-
-let queue: WorkQueue | null = null;
-
-const server = new McpServer(
+export const server = new McpServer(
   {
     name: "Wonderland Editor",
     version: "0.1.0",
@@ -53,20 +33,12 @@ const server = new McpServer(
   }
 );
 
-[
-  "objects",
-  "textures",
-  "meshes",
-  "materials",
-  "animations",
-  "skins",
-  "images",
-  "shaders",
-  "pipelines",
-  "fonts",
-  "morphTargets",
-  "particleEffects",
-].forEach((resourceType) => {
+let queue: WorkQueue | null = null;
+export function setQueue(q: WorkQueue) {
+  queue = q;
+}
+
+ResourceTypes.forEach((resourceType) => {
   console.log("Set up", resourceType, "resource");
   server.resource(
     resourceType,
@@ -78,7 +50,7 @@ const server = new McpServer(
             data[resourceType as keyof EditorData]
           ).map(([id, r]) => ({
             uri: `${resourceType}://${id}`,
-            mimeType: "text/plain",
+            mimeType: "application/json",
             name: (r as Resource).name,
           })),
         };
@@ -104,59 +76,64 @@ const server = new McpServer(
   );
 });
 
-const modifyObjectsSchema = {
-  modifications: z
-    .object({
-      name: z.string().describe("Name for the object").optional(),
-      id: z.string().describe("ID of the object").optional(),
-      parentId: z
-        .string()
-        .describe("ID of the parent to parent to.")
-        .optional(),
-      position: z
-        .number()
-        .array()
-        .length(3)
-        .describe("Array of three numbers for position")
-        .optional(),
-      rotation: z
-        .number()
-        .array()
-        .length(4)
-        .describe("Array of four numbers for rotation quaternion")
-        .optional(),
-      scaling: z
-        .number()
-        .array()
-        .length(3)
-        .describe("Array of three numbers for scaling")
-        .optional(),
-      addComponents: z
-        .object({
-          type: z.string(),
-          properties: z.object({}).passthrough(),
-        })
-        .array()
-        .describe(
-          "Components to add to the object, any object in the format {type: string, [type]: {properties}}"
-        )
-        .optional(),
-      modifyComponents: z
-        .object({
-          index: z.number(),
-          properties: z.object({}).passthrough(),
-        })
-        .array()
-        .describe("Components to modify on the object.")
-        .optional(),
-      removeComponents: z
-        .number()
-        .array()
-        .describe("Indices of components to remove from the object")
-        .optional(),
-    })
-    .array(),
-};
+server.tool(
+  "query_resources",
+  "List resources of a certain type, filtering by property, if needed.",
+  queryResourcesSchema,
+  async ({ resourceType, ids, includeFilter, excludeFilter }) => {
+    try {
+      // @ts-ignore
+      const allResources: Record<string, any> = data[resourceType];
+      let resources: Record<string, any>[] = ids
+        ? ids.map((id) => ({ id, ...allResources[id] }))
+        : Object.entries(allResources).map(([id, res]) => ({ id, ...res }));
+
+      if (includeFilter && "name" in includeFilter) {
+        resources = resources.filter((res: any) => {
+          return res.name.indexOf(includeFilter.name) >= 0;
+        });
+        delete includeFilter.name;
+      }
+
+      if (includeFilter) {
+        const keys = Object.keys(includeFilter);
+        resources = resources.filter((res: any) => {
+          for (const key of keys) {
+            if (res[key] != includeFilter[key]) return false;
+          }
+          return true;
+        });
+      }
+
+      if (excludeFilter && "name" in excludeFilter) {
+        resources = resources.filter((res: any) => {
+          return res.name.indexOf(excludeFilter.name) >= 0;
+        });
+        delete excludeFilter.name;
+      }
+
+      if (excludeFilter) {
+        const keys = Object.keys(excludeFilter);
+        resources = resources.filter((res: any) => {
+          for (const key of keys) {
+            if (res[key] == excludeFilter[key]) return false;
+          }
+          return true;
+        });
+      }
+
+      return {
+        content: resources.map((res) => ({
+          type: "text",
+          text: JSON.stringify(res),
+        })),
+      };
+    } catch (error: any) {
+      console.error("Validation errors:", error, error?.errors ?? "");
+      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+    }
+  }
+);
 
 server.tool(
   "modify_objects",
@@ -164,7 +141,7 @@ server.tool(
   modifyObjectsSchema,
   async ({ modifications }) => {
     try {
-      await queue!.push(() => {
+      await queue!.push(async () => {
         modifications.map(
           ({
             parentId,
@@ -187,12 +164,28 @@ server.tool(
             if (scaling) o.scaling = scaling;
             if (modifyComponents) {
               modifyComponents.forEach(({ index, properties }) => {
-                if (o.components[index].type == null) return;
-                Object.assign(
-                  // @ts-ignore
-                  o.components[index][o.components[index].type],
-                  properties
-                );
+                const comp = o.components[index];
+                if (comp.type == null) return;
+
+                for (const key of Object.keys(properties)) {
+                  try {
+                    // @ts-ignore
+                    comp[o.components[index].type!][key] = properties[key];
+                  } catch (e) {
+                    console.error(
+                      "Could not assign property",
+                      key,
+                      "to",
+                      comp.type,
+                      "component at index",
+                      index,
+                      "of object",
+                      o.name,
+                      "\n",
+                      e
+                    );
+                  }
+                }
               });
             }
             if (removeComponents) {
@@ -221,27 +214,13 @@ server.tool(
   }
 );
 
-const importSceneFilesSchema = {
-  imports: z
-    .object({
-      path: z.string(),
-      parentId: z
-        .string()
-        .describe(
-          "ID of the parent to parent to, leave empty to import at root."
-        )
-        .optional(),
-    })
-    .array(),
-};
-
 server.tool(
-  "import_files",
-  "Import scene files by path.",
+  "import_scenes",
+  "Import scene files (e.g. GLB, FBX, OBJ) by path.",
   importSceneFilesSchema,
   async ({ imports }) => {
     try {
-      await queue!.push(() => {
+      await queue!.push(async () => {
         imports.map(({ path, parentId }) => {
           tools.loadScene(path, { parent: parentId });
         });
@@ -255,43 +234,22 @@ server.tool(
   }
 );
 
-const app = express();
-const transports: { [sessionId: string]: SSEServerTransport } = {};
-
-app.get("/sse", async (_: Request, res: Response) => {
-  console.log("MCP client connected");
-  const transport = new SSEServerTransport("/messages", res);
-  transports[transport.sessionId] = transport;
-  res.on("close", () => {
-    delete transports[transport.sessionId];
-  });
-  await server.connect(transport);
-});
-
-app.post("/messages", async (req: Request, res: Response) => {
-  const sessionId = req.query.sessionId as string;
-  const transport = transports[sessionId];
-  if (transport) {
-    await transport.handlePostMessage(req, res);
-  } else {
-    res.status(400).send("No transport found for sessionId");
-  }
-});
-
-export async function main(params: { port: number; queue: WorkQueue }) {
-  queue = params.queue;
-  return new Promise<void>((res, rej) => {
+server.tool(
+  "import_files",
+  "Import files (e.g. images) by path.",
+  importFilesSchema,
+  async ({ imports }) => {
     try {
-      app.listen(params.port, (error) => {
-        if (error) rej(error);
+      await queue!.push(async () => {
+        imports.map(({ path }) => {
+          tools.loadFile(path);
+        });
       });
-      res();
-    } catch (e) {
-      rej(e);
-    }
-  });
-}
 
-export async function shutdown() {
-  server.close();
-}
+      return { content: [{ type: "text", text: "Done." }] };
+    } catch (error: any) {
+      console.error("Validation errors:", error, error?.errors ?? "");
+      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+    }
+  }
+);

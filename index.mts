@@ -1,6 +1,7 @@
 import { EditorPlugin, ui } from "@wonderlandengine/editor-api";
 
-import { WorkQueue, main, shutdown } from "./mcp-server.js";
+import { main, shutdown } from "./server.js";
+import { WorkQueue } from "./utils/work-queue.js";
 
 const PORT = 3000;
 const CONFIG_EXAMPLE = `    "wonderland-editor-mcp": {
