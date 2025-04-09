@@ -78,7 +78,7 @@ export const modifyObjectsSchema = {
         })
         .array()
         .describe(
-          "Components to add to the object, any object in the format {type: string, [type]: {properties}}"
+          "Components to add, specify the type and the properties to set."
         )
         .optional(),
       modifyComponents: z
