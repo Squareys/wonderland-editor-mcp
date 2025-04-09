@@ -84,9 +84,10 @@ server.tool(
     try {
       // @ts-ignore
       const allResources: Record<string, any> = data[resourceType];
-      let resources: Record<string, any>[] = ids
-        ? ids.map((id) => ({ id, ...allResources[id] }))
-        : Object.entries(allResources).map(([id, res]) => ({ id, ...res }));
+      let resources: Record<string, any>[] =
+        ids && ids.length > 0
+          ? ids.map((id) => ({ id, ...allResources[id] }))
+          : Object.entries(allResources).map(([id, res]) => ({ id, ...res }));
 
       if (includeFilter && "name" in includeFilter) {
         resources = resources.filter((res: any) => {

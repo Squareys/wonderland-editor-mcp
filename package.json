@@ -6,7 +6,8 @@
     "module": "./build/index.mjs",
     "scripts": {
         "build": "tsc",
-        "watch": "tsc --watch"
+        "watch": "tsc --watch",
+        "inspect": "npx -y @modelcontextprotocol/inspector"
     },
     "author": "",
     "license": "ISC",
