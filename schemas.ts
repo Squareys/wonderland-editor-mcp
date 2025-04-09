@@ -51,6 +51,7 @@ export const modifyObjectsSchema = {
       id: z.string().describe("ID of the object").optional(),
       parentId: z
         .string()
+        .nullable()
         .describe("ID of the parent to parent to.")
         .optional(),
       position: z
