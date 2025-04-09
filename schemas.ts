@@ -123,3 +123,7 @@ export const importFilesSchema = {
     })
     .array(),
 };
+
+export const computeMeshBoundsSchema = {
+  meshIds: z.string().array(),
+};

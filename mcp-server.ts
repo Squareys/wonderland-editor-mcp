@@ -13,6 +13,7 @@ import { WorkQueue } from "./utils/work-queue.js";
 import { randomUUID } from "crypto";
 import {
   ResourceTypes,
+  computeMeshBoundsSchema,
   importFilesSchema,
   importSceneFilesSchema,
   modifyObjectsSchema,
@@ -248,6 +249,28 @@ server.tool(
       });
 
       return { content: [{ type: "text", text: "Done." }] };
+    } catch (error: any) {
+      console.error("Validation errors:", error, error?.errors ?? "");
+      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+    }
+  }
+);
+
+server.tool(
+  "compute_mesh_bounds",
+  "Compute the bounds of the given mesh resources.",
+  computeMeshBoundsSchema,
+  async ({ meshIds }) => {
+    try {
+      const bounds = meshIds.map((meshId) => {
+        const out = new Float32Array(6);
+        tools.computeMeshBounds(meshId, out);
+        return { min: out.subarray(0, 3), max: out.subarray(3, 6) };
+      });
+
+      return {
+        content: bounds.map((b) => ({ type: "text", text: JSON.stringify(b) })),
+      };
     } catch (error: any) {
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
