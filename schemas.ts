@@ -99,6 +99,25 @@ export const modifyObjectsSchema = {
     .array(),
 };
 
+export const modifyResourcesSchema = {
+  modifications: z
+    .object({
+      resourceType: z.enum(ResourceTypes).describe("Type of resource."),
+      id: z.string().describe("ID of the resource to modify."),
+      changeProperties: z
+        .object({})
+        .passthrough()
+        .describe("Properties to change.")
+        .optional(),
+      resetProperties: z
+        .string()
+        .array()
+        .describe("Property names to reset to their defaults.")
+        .optional(),
+    })
+    .array(),
+};
+
 export const importSceneFilesSchema = {
   imports: z
     .object({

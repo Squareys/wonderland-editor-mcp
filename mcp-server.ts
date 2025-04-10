@@ -18,6 +18,7 @@ import {
   importFilesSchema,
   importSceneFilesSchema,
   modifyObjectsSchema,
+  modifyResourcesSchema,
   queryResourcesSchema,
 } from "./schemas.js";
 
@@ -226,6 +227,39 @@ server.tool(
                 // @ts-ignore
                 Object.assign(o.components[index][c.type], c.properties);
               });
+            }
+          }
+        );
+      });
+
+      return { content: [{ type: "text", text: "Done." }] };
+    } catch (error: any) {
+      console.error("Validation errors:", error, error?.errors ?? "");
+      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+    }
+  }
+);
+
+server.tool(
+  "modify_resources",
+  "Create or modify resources in the Wonderland Engine project. Cannot be used to modify objects. Use modify_objects to modify objects.",
+  modifyResourcesSchema,
+  async ({ modifications }) => {
+    try {
+      await queue!.push(async () => {
+        modifications.map(
+          ({ id, resourceType, changeProperties, resetProperties }) => {
+            // @ts-ignore
+            const res = data[resourceType][id];
+
+            if (resetProperties) {
+              resetProperties.forEach((key) => {
+                delete res[key];
+              });
+            }
+
+            if (changeProperties) {
+              Object.assign(res, changeProperties);
             }
           }
         );
