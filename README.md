@@ -4,6 +4,10 @@
 
 The Wonderland Editor MCP Plugin facilitates interaction with the Model Context Protocol (MCP) within the Wonderland Engine, enhancing your development workflows with AI assistants.
 
+## Requirements
+
+To use this plugin, you need a nightly version or version 1.4.0+ of Wonderland Engine.
+
 ## Configuration
 
 ### Project

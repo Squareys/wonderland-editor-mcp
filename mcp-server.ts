@@ -13,10 +13,15 @@ import { WorkQueue } from "./utils/work-queue.js";
 import { randomUUID } from "crypto";
 import {
   ResourceTypes,
+  computeMeshBoundsSchema,
+  deleteObjectsSchema,
   importFilesSchema,
   importSceneFilesSchema,
   modifyObjectsSchema,
+  modifyResourcesSchema,
+  modifySettingsSchema,
   queryResourcesSchema,
+  querySettingsSchema,
 } from "./schemas.js";
 
 export const server = new McpServer(
@@ -137,6 +142,82 @@ server.tool(
 );
 
 server.tool(
+  "query_settings",
+  "Retrieve the current project settings.",
+  querySettingsSchema,
+  async ({}) => {
+    try {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(data.settings),
+          },
+        ],
+      };
+    } catch (error: any) {
+      console.error("Validation errors:", error, error?.errors ?? "");
+      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+    }
+  }
+);
+
+server.tool(
+  "modify_settings",
+  "Retrieve the current project settings.",
+  modifySettingsSchema,
+  async ({ changeSettings, resetSettings }) => {
+    try {
+      resetSettings?.forEach((key) => {
+        const split = key.split(".");
+
+        let setting = data.settings;
+        for (const k of split.splice(0, split.length - 1)) {
+          // @ts-ignore
+          setting = setting[k];
+        }
+        // @ts-ignore
+        delete setting[split[0]];
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(data.settings),
+          },
+        ],
+      };
+    } catch (error: any) {
+      console.error("Validation errors:", error, error?.errors ?? "");
+      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+    }
+  }
+);
+
+server.tool(
+  "delete_objects",
+  "Delete objects.",
+  deleteObjectsSchema,
+  async ({ objectIds }) => {
+    try {
+      await queue!.push(async () => {
+        objectIds.map((objectId) => {
+          delete data.objects[objectId];
+        });
+      });
+
+      return {
+        content: [{ type: "text", text: "Done." }],
+      };
+    } catch (error: any) {
+      console.error("Validation errors:", error, error?.errors ?? "");
+      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+    }
+  }
+);
+
+server.tool(
   "modify_objects",
   "Create or modify an objects in the Wonderland Engine project.",
   modifyObjectsSchema,
@@ -216,15 +297,50 @@ server.tool(
 );
 
 server.tool(
+  "modify_resources",
+  "Create or modify resources in the Wonderland Engine project. Cannot be used to modify objects. Use modify_objects to modify objects.",
+  modifyResourcesSchema,
+  async ({ modifications }) => {
+    try {
+      await queue!.push(async () => {
+        modifications.map(
+          ({ id, resourceType, changeProperties, resetProperties }) => {
+            // @ts-ignore
+            const res = data[resourceType][id];
+
+            if (resetProperties) {
+              resetProperties.forEach((key) => {
+                delete res[key];
+              });
+            }
+
+            if (changeProperties) {
+              Object.assign(res, changeProperties);
+            }
+          }
+        );
+      });
+
+      return { content: [{ type: "text", text: "Done." }] };
+    } catch (error: any) {
+      console.error("Validation errors:", error, error?.errors ?? "");
+      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+    }
+  }
+);
+
+server.tool(
   "import_scenes",
   "Import scene files (e.g. GLB, FBX, OBJ) by path.",
   importSceneFilesSchema,
   async ({ imports }) => {
     try {
       await queue!.push(async () => {
-        imports.map(({ path, parentId }) => {
-          tools.loadScene(path, { parent: parentId });
-        });
+        await Promise.all(
+          imports.map(({ path, parentId }) => {
+            return tools.loadScene(path, { parent: parentId });
+          })
+        );
       });
 
       return { content: [{ type: "text", text: "Done." }] };
@@ -248,6 +364,28 @@ server.tool(
       });
 
       return { content: [{ type: "text", text: "Done." }] };
+    } catch (error: any) {
+      console.error("Validation errors:", error, error?.errors ?? "");
+      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+    }
+  }
+);
+
+server.tool(
+  "compute_mesh_bounds",
+  "Compute the bounds of the given mesh resources.",
+  computeMeshBoundsSchema,
+  async ({ meshIds }) => {
+    try {
+      const bounds = meshIds.map((meshId) => {
+        const out = new Float32Array(6);
+        tools.computeMeshBounds(meshId, out);
+        return { min: out.subarray(0, 3), max: out.subarray(3, 6) };
+      });
+
+      return {
+        content: bounds.map((b) => ({ type: "text", text: JSON.stringify(b) })),
+      };
     } catch (error: any) {
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error("Invalid arguments: " + JSON.stringify(error.errors));

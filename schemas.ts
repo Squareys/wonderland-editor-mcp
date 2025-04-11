@@ -40,6 +40,28 @@ export const queryResourcesSchema = {
     .optional(),
 };
 
+export const querySettingsSchema = {};
+export const modifySettingsSchema = {
+  changeSettings: z
+    .object({})
+    .passthrough()
+    .optional()
+    .describe(
+      'Object of settings to override. Nested settings would be specified as {"physics": {"enabled": true}}.'
+    ),
+  resetSettings: z
+    .string()
+    .array()
+    .optional()
+    .describe(
+      "Settings paths to reset, separated by '.', e.g. physics.enabled"
+    ),
+};
+
+export const deleteObjectsSchema = {
+  objectIds: z.string().array(),
+};
+
 export const modifyObjectsSchema = {
   modifications: z
     .object({
@@ -47,6 +69,7 @@ export const modifyObjectsSchema = {
       id: z.string().describe("ID of the object").optional(),
       parentId: z
         .string()
+        .nullable()
         .describe("ID of the parent to parent to.")
         .optional(),
       position: z
@@ -74,7 +97,7 @@ export const modifyObjectsSchema = {
         })
         .array()
         .describe(
-          "Components to add to the object, any object in the format {type: string, [type]: {properties}}"
+          "Components to add, specify the type and the properties to set."
         )
         .optional(),
       modifyComponents: z
@@ -89,6 +112,25 @@ export const modifyObjectsSchema = {
         .number()
         .array()
         .describe("Indices of components to remove from the object")
+        .optional(),
+    })
+    .array(),
+};
+
+export const modifyResourcesSchema = {
+  modifications: z
+    .object({
+      resourceType: z.enum(ResourceTypes).describe("Type of resource."),
+      id: z.string().describe("ID of the resource to modify."),
+      changeProperties: z
+        .object({})
+        .passthrough()
+        .describe("Properties to change.")
+        .optional(),
+      resetProperties: z
+        .string()
+        .array()
+        .describe("Property names to reset to their defaults.")
         .optional(),
     })
     .array(),
@@ -122,4 +164,8 @@ export const importFilesSchema = {
         ),
     })
     .array(),
+};
+
+export const computeMeshBoundsSchema = {
+  meshIds: z.string().array(),
 };
