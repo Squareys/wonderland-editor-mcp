@@ -19,7 +19,9 @@ import {
   importSceneFilesSchema,
   modifyObjectsSchema,
   modifyResourcesSchema,
+  modifySettingsSchema,
   queryResourcesSchema,
+  querySettingsSchema,
 } from "./schemas.js";
 
 export const server = new McpServer(
@@ -131,6 +133,60 @@ server.tool(
           type: "text",
           text: JSON.stringify(res),
         })),
+      };
+    } catch (error: any) {
+      console.error("Validation errors:", error, error?.errors ?? "");
+      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+    }
+  }
+);
+
+server.tool(
+  "query_settings",
+  "Retrieve the current project settings.",
+  querySettingsSchema,
+  async ({}) => {
+    try {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(data.settings),
+          },
+        ],
+      };
+    } catch (error: any) {
+      console.error("Validation errors:", error, error?.errors ?? "");
+      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+    }
+  }
+);
+
+server.tool(
+  "modify_settings",
+  "Retrieve the current project settings.",
+  modifySettingsSchema,
+  async ({ changeSettings, resetSettings }) => {
+    try {
+      resetSettings?.forEach((key) => {
+        const split = key.split(".");
+
+        let setting = data.settings;
+        for (const k of split.splice(0, split.length - 1)) {
+          // @ts-ignore
+          setting = setting[k];
+        }
+        // @ts-ignore
+        delete setting[split[0]];
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(data.settings),
+          },
+        ],
       };
     } catch (error: any) {
       console.error("Validation errors:", error, error?.errors ?? "");

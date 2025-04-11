@@ -40,6 +40,24 @@ export const queryResourcesSchema = {
     .optional(),
 };
 
+export const querySettingsSchema = {};
+export const modifySettingsSchema = {
+  changeSettings: z
+    .object({})
+    .passthrough()
+    .optional()
+    .describe(
+      'Object of settings to override. Nested settings would be specified as {"physics": {"enabled": true}}.'
+    ),
+  resetSettings: z
+    .string()
+    .array()
+    .optional()
+    .describe(
+      "Settings paths to reset, separated by '.', e.g. physics.enabled"
+    ),
+};
+
 export const deleteObjectsSchema = {
   objectIds: z.string().array(),
 };
