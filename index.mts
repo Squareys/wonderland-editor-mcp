@@ -39,7 +39,7 @@ export default class Index extends EditorPlugin {
         "or any other client that supports MCP via SSE transport:"
     );
     ui.text('{\n  "mcpServers": {');
-    ui.inputText("", CONFIG_EXAMPLE);
+    ui.inputTextMultiline("instruction", CONFIG_EXAMPLE);
     ui.text("  }\n}\n");
 
     /* Consume all functions in the queue */

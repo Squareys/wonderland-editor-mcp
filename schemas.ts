@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { validateSchemas } from "./validateSchemas.js";
 
 export const ResourceTypes = [
   "objects",
@@ -25,15 +26,13 @@ export const queryResourcesSchema = {
     )
     .optional(),
   includeFilter: z
-    .object({})
-    .passthrough()
+    .record(z.string(), z.any())
     .describe(
       "Optional properties to match. Name will be matched with contains substring comparison rather than full comparison. Leave out to disable this filtering."
     )
     .optional(),
   excludeFilter: z
-    .object({})
-    .passthrough()
+    .record(z.string(), z.any())
     .describe(
       "Optional properties, which will exclude items from the list if match. Name will be matched with contains substring comparison rather than full comparison. Leave out to disable this filtering."
     )
@@ -41,10 +40,10 @@ export const queryResourcesSchema = {
 };
 
 export const querySettingsSchema = {};
+
+const SafeRecord = z.record(z.string(), z.unknown());
 export const modifySettingsSchema = {
-  changeSettings: z
-    .object({})
-    .passthrough()
+  changeSettings: SafeRecord
     .optional()
     .describe(
       'Object of settings to override. Nested settings would be specified as {"physics": {"enabled": true}}.'
@@ -93,7 +92,7 @@ export const modifyObjectsSchema = {
       addComponents: z
         .object({
           type: z.string(),
-          properties: z.object({}).passthrough(),
+          properties: z.record(z.string(), z.any()),
         })
         .array()
         .describe(
@@ -103,7 +102,7 @@ export const modifyObjectsSchema = {
       modifyComponents: z
         .object({
           index: z.number(),
-          properties: z.object({}).passthrough(),
+          properties: z.record(z.string(), z.any()),
         })
         .array()
         .describe("Components to modify on the object.")
@@ -123,8 +122,7 @@ export const modifyResourcesSchema = {
       resourceType: z.enum(ResourceTypes).describe("Type of resource."),
       id: z.string().describe("ID of the resource to modify."),
       changeProperties: z
-        .object({})
-        .passthrough()
+        .record(z.string(), z.any())
         .describe("Properties to change.")
         .optional(),
       resetProperties: z
