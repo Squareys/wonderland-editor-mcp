@@ -167,3 +167,23 @@ export const importFilesSchema = {
 export const computeMeshBoundsSchema = {
   meshIds: z.string().array(),
 };
+
+// Validate all schemas in schemas.ts
+const schemas = {
+  queryResourcesSchema,
+  querySettingsSchema,
+  modifySettingsSchema,
+  deleteObjectsSchema,
+  modifyObjectsSchema,
+  modifyResourcesSchema,
+  importSceneFilesSchema,
+  importFilesSchema,
+  computeMeshBoundsSchema,
+};
+
+try {
+  validateSchemas(schemas);
+  console.log("All schemas are valid.");
+} catch (error) {
+  console.error("Schema validation failed:", error);
+}
