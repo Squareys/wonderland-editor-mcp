@@ -1,6 +1,7 @@
 import {
   McpServer,
   ResourceTemplate,
+  ReadResourceTemplateCallback,
 } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   EditorData,
@@ -24,19 +25,10 @@ import {
   querySettingsSchema,
 } from "./schemas.js";
 
-export const server = new McpServer(
-  {
-    name: "Wonderland Editor",
-    version: "0.1.0",
-  },
-  {
-    capabilities: {
-      resources: {},
-      tools: {},
-      prompts: {},
-    },
-  }
-);
+export const server = new McpServer({
+  name: "Wonderland Editor",
+  version: "0.1.0",
+});
 
 let queue: WorkQueue | null = null;
 export function setQueue(q: WorkQueue) {
@@ -45,7 +37,7 @@ export function setQueue(q: WorkQueue) {
 
 ResourceTypes.forEach((resourceType) => {
   console.log("Set up", resourceType, "resource");
-  server.resource(
+  server.registerResource(
     resourceType,
     new ResourceTemplate(`${resourceType}://{id}`, {
       list: () => {
@@ -61,7 +53,12 @@ ResourceTypes.forEach((resourceType) => {
         };
       },
     }),
-    async (uri, { id }) => {
+    {
+      title: resourceType,
+      description: `Wonderland Engine ${resourceType} resource`,
+    },
+    async (uri: any, { params }: any) => {
+      const { id } = params;
       // @ts-ignore
       const resource = data[resourceType][id.toString()];
       if (!resource) {
@@ -81,10 +78,14 @@ ResourceTypes.forEach((resourceType) => {
   );
 });
 
-server.tool(
+server.registerTool(
   "query_resources",
-  "List resources of a certain type, filtering by property, if needed.",
-  queryResourcesSchema,
+  {
+    title: "Query Resources",
+    description:
+      "List resources of a certain type, filtering by property, if needed.",
+    inputSchema: queryResourcesSchema,
+  },
   async ({ resourceType, ids, includeFilter, excludeFilter }) => {
     try {
       // @ts-ignore
@@ -141,10 +142,13 @@ server.tool(
   }
 );
 
-server.tool(
+server.registerTool(
   "query_settings",
-  "Retrieve the current project settings.",
-  querySettingsSchema,
+  {
+    title: "Query Settings",
+    description: "Retrieve the current project settings.",
+    inputSchema: querySettingsSchema,
+  },
   async ({}) => {
     try {
       return {
@@ -162,10 +166,13 @@ server.tool(
   }
 );
 
-server.tool(
+server.registerTool(
   "modify_settings",
-  "Retrieve the current project settings.",
-  modifySettingsSchema,
+  {
+    title: "Modify Settings",
+    description: "Retrieve the current project settings.",
+    inputSchema: modifySettingsSchema,
+  },
   async ({ changeSettings, resetSettings }) => {
     try {
       resetSettings?.forEach((key) => {
@@ -195,10 +202,13 @@ server.tool(
   }
 );
 
-server.tool(
+server.registerTool(
   "delete_objects",
-  "Delete objects.",
-  deleteObjectsSchema,
+  {
+    title: "Delete Objects",
+    description: "Delete objects.",
+    inputSchema: deleteObjectsSchema,
+  },
   async ({ objectIds }) => {
     try {
       await queue!.push(async () => {
@@ -217,10 +227,14 @@ server.tool(
   }
 );
 
-server.tool(
+server.registerTool(
   "modify_objects",
-  "Create or modify an objects in the Wonderland Engine project.",
-  modifyObjectsSchema,
+  {
+    title: "Modify Objects",
+    description:
+      "Create or modify an objects in the Wonderland Engine project.",
+    inputSchema: modifyObjectsSchema,
+  },
   async ({ modifications }) => {
     try {
       await queue!.push(async () => {
@@ -296,10 +310,14 @@ server.tool(
   }
 );
 
-server.tool(
+server.registerTool(
   "modify_resources",
-  "Create or modify resources in the Wonderland Engine project. Cannot be used to modify objects. Use modify_objects to modify objects.",
-  modifyResourcesSchema,
+  {
+    title: "Modify Resources",
+    description:
+      "Create or modify resources in the Wonderland Engine project. Cannot be used to modify objects. Use modify_objects to modify objects.",
+    inputSchema: modifyResourcesSchema,
+  },
   async ({ modifications }) => {
     try {
       await queue!.push(async () => {
@@ -329,10 +347,13 @@ server.tool(
   }
 );
 
-server.tool(
+server.registerTool(
   "import_scenes",
-  "Import scene files (e.g. GLB, FBX, OBJ) by path.",
-  importSceneFilesSchema,
+  {
+    title: "Import Scenes",
+    description: "Import scene files (e.g. GLB, FBX, OBJ) by path.",
+    inputSchema: importSceneFilesSchema,
+  },
   async ({ imports }) => {
     try {
       await queue!.push(async () => {
@@ -351,10 +372,13 @@ server.tool(
   }
 );
 
-server.tool(
+server.registerTool(
   "import_files",
-  "Import files (e.g. images) by path.",
-  importFilesSchema,
+  {
+    title: "Import Files",
+    description: "Import files (e.g. images) by path.",
+    inputSchema: importFilesSchema,
+  },
   async ({ imports }) => {
     try {
       await queue!.push(async () => {
@@ -371,10 +395,13 @@ server.tool(
   }
 );
 
-server.tool(
+server.registerTool(
   "compute_mesh_bounds",
-  "Compute the bounds of the given mesh resources.",
-  computeMeshBoundsSchema,
+  {
+    title: "Compute Mesh Bounds",
+    description: "Compute the bounds of the given mesh resources.",
+    inputSchema: computeMeshBoundsSchema,
+  },
   async ({ meshIds }) => {
     try {
       const bounds = meshIds.map((meshId) => {

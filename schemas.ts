@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { validateSchemas } from "./validateSchemas.js";
+
+const SafeRecord = z.record(z.string(), z.any());
 
 export const ResourceTypes = [
   "objects",
@@ -25,29 +26,20 @@ export const queryResourcesSchema = {
       "List of ids to query, leave out to list all resources of given type."
     )
     .optional(),
-  includeFilter: z
-    .record(z.string(), z.any())
-    .describe(
-      "Optional properties to match. Name will be matched with contains substring comparison rather than full comparison. Leave out to disable this filtering."
-    )
-    .optional(),
-  excludeFilter: z
-    .record(z.string(), z.any())
-    .describe(
-      "Optional properties, which will exclude items from the list if match. Name will be matched with contains substring comparison rather than full comparison. Leave out to disable this filtering."
-    )
-    .optional(),
+  includeFilter: SafeRecord.describe(
+    "Optional properties to match. Name will be matched with contains substring comparison rather than full comparison. Leave out to disable this filtering."
+  ).optional(),
+  excludeFilter: SafeRecord.describe(
+    "Optional properties, which will exclude items from the list if match. Name will be matched with contains substring comparison rather than full comparison. Leave out to disable this filtering."
+  ).optional(),
 };
 
 export const querySettingsSchema = {};
 
-const SafeRecord = z.record(z.string(), z.unknown());
 export const modifySettingsSchema = {
-  changeSettings: SafeRecord
-    .optional()
-    .describe(
-      'Object of settings to override. Nested settings would be specified as {"physics": {"enabled": true}}.'
-    ),
+  changeSettings: SafeRecord.optional().describe(
+    'Object of settings to override. Nested settings would be specified as {"physics": {"enabled": true}}.'
+  ),
   resetSettings: z
     .string()
     .array()
@@ -121,10 +113,7 @@ export const modifyResourcesSchema = {
     .object({
       resourceType: z.enum(ResourceTypes).describe("Type of resource."),
       id: z.string().describe("ID of the resource to modify."),
-      changeProperties: z
-        .record(z.string(), z.any())
-        .describe("Properties to change.")
-        .optional(),
+      changeProperties: SafeRecord.optional().describe("Properties to change."),
       resetProperties: z
         .string()
         .array()
@@ -167,23 +156,3 @@ export const importFilesSchema = {
 export const computeMeshBoundsSchema = {
   meshIds: z.string().array(),
 };
-
-// Validate all schemas in schemas.ts
-const schemas = {
-  queryResourcesSchema,
-  querySettingsSchema,
-  modifySettingsSchema,
-  deleteObjectsSchema,
-  modifyObjectsSchema,
-  modifyResourcesSchema,
-  importSceneFilesSchema,
-  importFilesSchema,
-  computeMeshBoundsSchema,
-};
-
-try {
-  validateSchemas(schemas);
-  console.log("All schemas are valid.");
-} catch (error) {
-  console.error("Schema validation failed:", error);
-}

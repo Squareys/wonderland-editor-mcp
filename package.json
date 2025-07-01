@@ -14,11 +14,10 @@
     "description": "",
     "wonderlandengine": {},
     "dependencies": {
-        "@modelcontextprotocol/sdk": "^1.12.3",
+        "@modelcontextprotocol/sdk": "^1.13.2",
         "@types/express": "^5.0.1",
         "@wonderlandengine/editor-api": "^1.4.3",
-        "express": "^5.1.0",
-        "zod-to-json-schema": "^3.24.5"
+        "express": "^5.1.0"
     },
     "devDependencies": {
         "@types/node": "^20.11.24",

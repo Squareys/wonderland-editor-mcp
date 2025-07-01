@@ -3,9 +3,9 @@ import { EditorPlugin, ui } from "@wonderlandengine/editor-api";
 import { main, shutdown } from "./server.js";
 import { WorkQueue } from "./utils/work-queue.js";
 
-const PORT = 3000;
+const PORT = 3020;
 const CONFIG_EXAMPLE = `    "wonderland-editor-mcp": {
-      "url": "http://localhost:${PORT}/sse"
+      "url": "http://localhost:${PORT}/mcp"
     }
 `;
 
@@ -13,7 +13,7 @@ const CONFIG_EXAMPLE = `    "wonderland-editor-mcp": {
 export default class Index extends EditorPlugin {
   queue!: WorkQueue;
   commandsCount = 0;
-  status = "running";
+  status = "running on port " + PORT;
 
   constructor() {
     super();
@@ -35,8 +35,8 @@ export default class Index extends EditorPlugin {
     ui.text(`Commands run: ${this.commandsCount}.`);
     ui.separator();
     ui.text(
-      "Copy the following config into Cursor\n" +
-        "or any other client that supports MCP via SSE transport:"
+      "Copy the following config into your config file\n" +
+        "(any client that supports MCP via Streamable HTTP transport):"
     );
     ui.text('{\n  "mcpServers": {');
     ui.inputTextMultiline("instruction", CONFIG_EXAMPLE);
