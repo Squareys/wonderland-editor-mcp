@@ -236,77 +236,76 @@ server.registerTool(
     inputSchema: modifyObjectsSchema,
   },
   async ({ modifications }) => {
-    try {
-      await queue!.push(async () => {
-        modifications.map(
-          ({
-            parentId,
-            position,
-            rotation,
-            scaling,
-            id,
-            name,
-            addComponents,
-            modifyComponents,
-            removeComponents,
-          }) => {
-            id = id ?? randomUUID();
-            const o = data.objects[id];
+    await queue!.push(async () => {
+      modifications.map(
+        ({
+          parentId,
+          position,
+          rotation,
+          scaling,
+          id,
+          name,
+          addComponents,
+          modifyComponents,
+          removeComponents,
+        }) => {
+          id = id ?? randomUUID();
+          const o = data.objects[id];
 
-            if (name) o.name = name;
-            if (parentId) o.parent = parentId;
-            if (position) o.translation = position;
-            if (rotation) o.rotation = rotation;
-            if (scaling) o.scaling = scaling;
-            if (modifyComponents) {
-              modifyComponents.forEach(({ index, properties }) => {
-                const comp = o.components[index];
-                if (comp.type == null) return;
-
-                for (const key of Object.keys(properties)) {
-                  try {
-                    // @ts-ignore
-                    comp[o.components[index].type!][key] = properties[key];
-                  } catch (e) {
-                    console.error(
-                      "Could not assign property",
-                      key,
-                      "to",
-                      comp.type,
-                      "component at index",
-                      index,
-                      "of object",
-                      o.name,
-                      "\n",
-                      e
-                    );
-                  }
+          if (name) o.name = name;
+          if (parentId) o.parent = parentId;
+          if (position) o.translation = position;
+          if (rotation) o.rotation = rotation;
+          if (scaling) o.scaling = scaling;
+          if (modifyComponents) {
+            modifyComponents.forEach(({ index, properties }) => {
+              const comp = o.components[index];
+              if (comp.type == null) return;
+              //@ts-ignore
+              const props = comp[comp.type];
+              assignComponentProperties(comp.type, props, properties, o, index);
+              for (const key of Object.keys(properties)) {
+                try {
+                  // @ts-ignore
+                  comp[o.components[index].type!][key] = properties[key];
+                } catch (e) {
+                  console.error(
+                    "Could not assign property",
+                    key,
+                    "to",
+                    comp.type,
+                    "component at index",
+                    index,
+                    "of object",
+                    o.name,
+                    "\n",
+                    e
+                  );
                 }
-              });
-            }
-            if (removeComponents) {
-              removeComponents
-                .sort()
-                .reverse()
-                .forEach((i) => delete o.components[i]);
-            }
-            if (addComponents) {
-              addComponents.forEach((c) => {
-                const index = o.components?.length ?? 0;
-                o.components[index].type = c.type;
-                // @ts-ignore
-                Object.assign(o.components[index][c.type], c.properties);
-              });
-            }
+              }
+            });
           }
-        );
-      });
+          if (removeComponents) {
+            removeComponents
+              .sort()
+              .reverse()
+              .forEach((i) => delete o.components[i]);
+          }
+          if (addComponents) {
+            addComponents.forEach((c) => {
+              const index = o.components?.length ?? 0;
+              o.components[index].type = c.type;
+              // @ts-ignore
+              const comp = o.components[index][c.type];
+              assignComponentProperties(c.type, comp, c.properties, o, index);
+              console.log("Assigned properties", o.components[index]);
+            });
+          }
+        }
+      );
+    });
 
-      return { content: [{ type: "text", text: "Done." }] };
-    } catch (error: any) {
-      console.error("Validation errors:", error, error?.errors ?? "");
-      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
-    }
+    return { content: [{ type: "text", text: "Done." }] };
   }
 );
 
@@ -419,3 +418,41 @@ server.registerTool(
     }
   }
 );
+/**
+ * Assigns properties to a component, ensuring type and length consistency.
+ *
+ * @param typeName Name of the component type
+ * @param comp Component properties
+ * @param properties Properties to assign to the component
+ * @param o Object containing the component
+ */
+function assignComponentProperties(
+  typeName: string,
+  comp: any,
+  properties: Record<string, any>,
+  o: { name: string },
+  index: number = 0
+) {
+  for (const key of Object.keys(comp)) {
+    if (key in properties) {
+      if (typeof comp[key] !== typeof properties[key]) {
+        throw new Error(
+          `Type mismatch for property ${key} in component ${
+            comp.type
+          } of object ${o.name}. Expected ${typeof comp[
+            key
+          ]}, got ${typeof properties[key]}`
+        );
+      }
+      if (
+        Array.isArray(comp[key]) &&
+        properties[key].length !== comp[key].length
+      ) {
+        throw new Error(
+          `Length mismatch for property '${key}' in '${typeName}' component with index ${index} of object "${o.name}". Expected length ${comp[key].length}, got ${properties[key].length}`
+        );
+      }
+      comp[key] = properties[key];
+    }
+  }
+}

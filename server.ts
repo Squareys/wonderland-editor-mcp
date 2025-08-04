@@ -29,6 +29,7 @@ app.post("/mcp", async (req: Request, res: Response) => {
         delete transports[transport.sessionId];
       }
     };
+    console.log("Client connecting with sessionId:", transport.sessionId);
     await server.connect(transport);
   } else {
     res.status(400).json({
