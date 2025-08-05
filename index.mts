@@ -42,6 +42,11 @@ export default class Index extends EditorPlugin {
     ui.inputTextMultiline("instruction", CONFIG_EXAMPLE);
     ui.text("  }\n}\n");
 
+    /* Backwards compatibility for Wonderland Editor < 1.4.6 */
+    this.update();
+  }
+
+  update() {
     /* Consume all functions in the queue */
     while (this.queue.pop()) ++this.commandsCount;
   }
