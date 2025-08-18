@@ -1,4 +1,4 @@
-import { EditorPlugin, ui } from "@wonderlandengine/editor-api";
+import { EditorPlugin, ui, tools } from "@wonderlandengine/editor-api";
 
 import { main, shutdown } from "./server.js";
 import { WorkQueue } from "./utils/work-queue.js";
@@ -48,6 +48,9 @@ export default class Index extends EditorPlugin {
 
   update() {
     /* Consume all functions in the queue */
-    while (this.queue.pop()) ++this.commandsCount;
+    if(!this.queue.empty) {
+        while (this.queue.pop()) ++this.commandsCount;
+        tools.packageProject();
+    }
   }
 }
