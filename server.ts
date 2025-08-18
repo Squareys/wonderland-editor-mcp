@@ -8,6 +8,11 @@ import { randomUUID } from "crypto";
 const app = express();
 app.use(express.json());
 
+app.use((req, _, next) =>{
+    console.log(req.method, req.path, req.body);
+    next();
+});
+
 const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
 app.post("/mcp", async (req: Request, res: Response) => {
