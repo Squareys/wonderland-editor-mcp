@@ -71,18 +71,31 @@ export function filterObjectProperties(
   const result: Record<string, any> = {};
   for (const filter of filters) {
     const keys = filter.split(".");
-    let current = result;
 
+    // First, validate that the entire path exists on the source object
+    let src: any = o;
+    let valid = true;
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];
-      if (!(key in o)) {
+      if (src == null || !(key in src)) {
+        valid = false;
         break;
       }
+      if (i < keys.length - 1) src = src[key];
+    }
+    if (!valid) continue; // Skip non-existent paths entirely
+
+    // Re-traverse to build the result path and assign the leaf value
+    let dst: any = result;
+    src = o;
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
       if (i === keys.length - 1) {
-        current[key] = o[key];
+        dst[key] = src[key];
       } else {
-        current[key] = current[key] || {};
-        current = current[key];
+        if (!(key in dst)) dst[key] = {};
+        dst = dst[key];
+        src = src[key];
       }
     }
   }

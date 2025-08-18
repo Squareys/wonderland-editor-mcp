@@ -29,6 +29,7 @@ import {
   assignNested,
   filterObjectProperties,
 } from "./utils.js";
+import { PaginatedResultSchema } from "@modelcontextprotocol/sdk/types.js";
 
 export const server = new McpServer({
   name: "Wonderland Editor",
@@ -91,14 +92,20 @@ server.registerTool(
       "List resources of a certain type, filtering by property, if needed.",
     inputSchema: queryResourcesSchema,
   },
-  async ({ resourceType, ids, includeFilter, excludeFilter }) => {
+  async ({ resourceType, ids, includeFilter, excludeFilter, paths }) => {
     try {
       // @ts-ignore
       const allResources: Record<string, any> = data[resourceType];
       let resources: Record<string, any>[] =
         ids && ids.length > 0
-          ? ids.map((id) => ({ id, ...allResources[id] }))
-          : Object.entries(allResources).map(([id, res]) => ({ id, ...res }));
+          ? ids.map((id) => ({
+              id,
+              ...allResources[id],
+            }))
+          : Object.entries(allResources).map(([id, res]) => ({
+              id,
+              ...res,
+            }));
 
       if (includeFilter && "name" in includeFilter) {
         resources = resources.filter((res: any) => {
@@ -132,6 +139,10 @@ server.registerTool(
           }
           return true;
         });
+      }
+
+      if (paths && paths.length > 0) {
+        resources = resources.map(filterObjectProperties.bind(null, paths));
       }
 
       return {
