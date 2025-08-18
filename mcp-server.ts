@@ -24,6 +24,7 @@ import {
   queryResourcesSchema,
   querySettingsSchema,
 } from "./schemas.js";
+import {assignComponentProperties, assignNested} from "./utils.js";
 
 export const server = new McpServer({
   name: "Wonderland Editor",
@@ -170,7 +171,7 @@ server.registerTool(
   "modify_settings",
   {
     title: "Modify Settings",
-    description: "Retrieve the current project settings.",
+    description: "Modify the project settings.",
     inputSchema: modifySettingsSchema,
   },
   async ({ changeSettings, resetSettings }) => {
@@ -186,6 +187,8 @@ server.registerTool(
         // @ts-ignore
         delete setting[split[0]];
       });
+
+      if(changeSettings) assignNested(data.settings, changeSettings);
 
       return {
         content: [
@@ -418,41 +421,3 @@ server.registerTool(
     }
   }
 );
-/**
- * Assigns properties to a component, ensuring type and length consistency.
- *
- * @param typeName Name of the component type
- * @param comp Component properties
- * @param properties Properties to assign to the component
- * @param o Object containing the component
- */
-function assignComponentProperties(
-  typeName: string,
-  comp: any,
-  properties: Record<string, any>,
-  o: { name: string },
-  index: number = 0
-) {
-  for (const key of Object.keys(comp)) {
-    if (key in properties) {
-      if (typeof comp[key] !== typeof properties[key]) {
-        throw new Error(
-          `Type mismatch for property ${key} in component ${
-            comp.type
-          } of object ${o.name}. Expected ${typeof comp[
-            key
-          ]}, got ${typeof properties[key]}`
-        );
-      }
-      if (
-        Array.isArray(comp[key]) &&
-        properties[key].length !== comp[key].length
-      ) {
-        throw new Error(
-          `Length mismatch for property '${key}' in '${typeName}' component with index ${index} of object "${o.name}". Expected length ${comp[key].length}, got ${properties[key].length}`
-        );
-      }
-      comp[key] = properties[key];
-    }
-  }
-}
