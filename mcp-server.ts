@@ -24,7 +24,11 @@ import {
   queryResourcesSchema,
   querySettingsSchema,
 } from "./schemas.js";
-import {assignComponentProperties, assignNested} from "./utils.js";
+import {
+  assignComponentProperties,
+  assignNested,
+  filterObjectProperties,
+} from "./utils.js";
 
 export const server = new McpServer({
   name: "Wonderland Editor",
@@ -147,16 +151,17 @@ server.registerTool(
   "query_settings",
   {
     title: "Query Settings",
-    description: "Retrieve the current project settings.",
+    description:
+      "Retrieve the current project settings. Specify paths like 'rendering' to retrieve only rendering settings.",
     inputSchema: querySettingsSchema,
   },
-  async ({}) => {
+  async ({ paths }: { paths?: string[] }) => {
     try {
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(data.settings),
+            text: JSON.stringify(filterObjectProperties(paths, data.settings)),
           },
         ],
       };
@@ -188,7 +193,7 @@ server.registerTool(
         delete setting[split[0]];
       });
 
-      if(changeSettings) assignNested(data.settings, changeSettings);
+      if (changeSettings) assignNested(data.settings, changeSettings);
 
       return {
         content: [
@@ -235,7 +240,8 @@ server.registerTool(
   {
     title: "Modify Objects",
     description:
-      "Create or modify an objects in the Wonderland Engine project.",
+      "Create or modify an objects in the Wonderland Engine project. " +
+      "Properties not specified in modifications are kept as-is.",
     inputSchema: modifyObjectsSchema,
   },
   async ({ modifications }) => {
@@ -317,7 +323,9 @@ server.registerTool(
   {
     title: "Modify Resources",
     description:
-      "Create or modify resources in the Wonderland Engine project. Cannot be used to modify objects. Use modify_objects to modify objects.",
+      "Create or modify resources in the Wonderland Engine project. " +
+      "Cannot be used to modify objects. Use modify_objects to modify " +
+      "objects. Properties not specified in changeProperties or resetProperties are kept as-is.",
     inputSchema: modifyResourcesSchema,
   },
   async ({ modifications }) => {
@@ -353,7 +361,8 @@ server.registerTool(
   "import_scenes",
   {
     title: "Import Scenes",
-    description: "Import scene files (e.g. GLB, FBX, OBJ) by path.",
+    description:
+      "Import scene files (e.g. GLB, FBX, OBJ) by path. Try to batch calls to this function.",
     inputSchema: importSceneFilesSchema,
   },
   async ({ imports }) => {
@@ -384,9 +393,7 @@ server.registerTool(
   async ({ imports }) => {
     try {
       await queue!.push(async () => {
-        imports.map(({ path }) => {
-          tools.loadFile(path);
-        });
+        imports.map((path) => tools.loadFile(path));
       });
 
       return { content: [{ type: "text", text: "Done." }] };

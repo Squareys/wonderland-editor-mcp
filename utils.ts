@@ -1,8 +1,11 @@
 export function isObject(item: any): item is Record<string, any> {
-  return (item && typeof item === 'object' && !Array.isArray(item));
+  return item && typeof item === "object" && !Array.isArray(item);
 }
 
-export function assignNested(target: Record<string, any>, source: Record<string, any>): void {
+export function assignNested(
+  target: Record<string, any>,
+  source: Record<string, any>
+): void {
   for (const key in source) {
     if (Object.prototype.hasOwnProperty.call(source, key)) {
       if (isObject(source[key]) && isObject(target[key])) {
@@ -51,4 +54,37 @@ export function assignComponentProperties(
       comp[key] = properties[key];
     }
   }
+}
+
+/**
+ * Filters the properties of an object based on the provided filters.
+ * @param filters List of property paths to filter by, e.g. "physics.enabled"
+ */
+export function filterObjectProperties(
+  filters: string[] | undefined,
+  o: any
+): any {
+  if (!filters || filters.length === 0) {
+    return o;
+  }
+
+  const result: Record<string, any> = {};
+  for (const filter of filters) {
+    const keys = filter.split(".");
+    let current = result;
+
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      if (!(key in o)) {
+        break;
+      }
+      if (i === keys.length - 1) {
+        current[key] = o[key];
+      } else {
+        current[key] = current[key] || {};
+        current = current[key];
+      }
+    }
+  }
+  return result;
 }

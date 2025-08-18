@@ -32,9 +32,22 @@ export const queryResourcesSchema = {
   excludeFilter: SafeRecord.describe(
     "Optional properties, which will exclude items from the list if match. Name will be matched with contains substring comparison rather than full comparison. Leave out to disable this filtering."
   ).optional(),
+  paths: z
+    .string()
+    .array()
+    .optional()
+    .describe(
+      'List of paths to filter each object by to reduce output (similar to GraphQL APIs), e.g. "name" will return only the object\'s name for each object.'
+    ),
 };
 
-export const querySettingsSchema = {};
+export const querySettingsSchema = {
+  paths: z
+    .string()
+    .array()
+    .optional()
+    .describe("List of settings paths to filter by, e.g. physics.enabled"),
+};
 
 export const modifySettingsSchema = {
   changeSettings: SafeRecord.optional().describe(
@@ -143,13 +156,10 @@ export const importSceneFilesSchema = {
 
 export const importFilesSchema = {
   imports: z
-    .object({
-      path: z
-        .string()
-        .describe(
-          "Path of the scene file relative to the project file. Formats are preferred in this order: GLB, FBX, GLTF, OBJ, PLY"
-        ),
-    })
+    .string()
+    .describe(
+      "Path of the scene file relative to the project file. Formats are preferred in this order: GLB, FBX, GLTF, OBJ, PLY"
+    )
     .array(),
 };
 
