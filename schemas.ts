@@ -144,12 +144,6 @@ export const importSceneFilesSchema = {
         .describe(
           "Path of the scene file relative to the project file. Formats are preferred in this order: GLB, FBX, GLTF, OBJ, PLY"
         ),
-      parentId: z
-        .string()
-        .describe(
-          "If set, the imported scene hierarchy ID will be reparented to this object, otherwise imported at the root."
-        )
-        .optional(),
     })
     .array(),
 };

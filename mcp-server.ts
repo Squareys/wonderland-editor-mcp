@@ -28,6 +28,10 @@ import {
   assignComponentProperties,
   assignNested,
   filterObjectProperties,
+  joinBounds,
+  scaleBounds,
+  computeTreeBounds as computeTreeBoundsUtil,
+  getBasename,
 } from "./utils.js";
 import { PaginatedResultSchema } from "@modelcontextprotocol/sdk/types.js";
 
@@ -40,49 +44,6 @@ let queue: WorkQueue | null = null;
 export function setQueue(q: WorkQueue) {
   queue = q;
 }
-
-ResourceTypes.forEach((resourceType) => {
-  console.log("Set up", resourceType, "resource");
-  server.registerResource(
-    resourceType,
-    new ResourceTemplate(`${resourceType}://{id}`, {
-      list: () => {
-        return {
-          resources: Object.entries(
-            //@ts-ignore
-            data[resourceType as keyof EditorData]
-          ).map(([id, r]) => ({
-            uri: `${resourceType}://${id}`,
-            mimeType: "application/json",
-            name: (r as Resource).name,
-          })),
-        };
-      },
-    }),
-    {
-      title: resourceType,
-      description: `Wonderland Engine ${resourceType} resource`,
-    },
-    async (uri: any, { params }: any) => {
-      const { id } = params;
-      // @ts-ignore
-      const resource = data[resourceType][id.toString()];
-      if (!resource) {
-        throw new Error(`${resourceType} resource with id ${id} not found`);
-      }
-
-      return {
-        contents: [
-          {
-            uri: uri.toString(),
-            mimeType: "text/plain",
-            text: JSON.stringify(resource),
-          },
-        ],
-      };
-    }
-  );
-});
 
 server.registerTool(
   "query_resources",
@@ -354,7 +315,7 @@ server.registerTool(
             }
 
             if (changeProperties) {
-              Object.assign(res, changeProperties);
+              assignNested(res, changeProperties);
             }
           }
         );
@@ -378,15 +339,134 @@ server.registerTool(
   },
   async ({ imports }) => {
     try {
-      await queue!.push(async () => {
-        await Promise.all(
-          imports.map(({ path, parentId }) => {
-            return tools.loadScene(path, { parent: parentId });
-          })
+      // Debug: Log raw inputs to help diagnose schema/shape issues during tests
+      console.log("import_scenes received imports:", JSON.stringify(imports));
+      const results: {
+        id: string;
+        rootId: string;
+        containerId: string;
+        count: number;
+        bounds: {
+          min: [number, number, number];
+          max: [number, number, number];
+        } | null;
+      }[] = [];
+
+      // Thin wrapper to call utility with editor data and tools callback
+      const computeTreeBounds = (objectId: string) =>
+        computeTreeBoundsUtil(
+          objectId,
+          data.objects as any,
+          (meshId: string, out: Float32Array) =>
+            tools.computeMeshBounds(meshId, out)
         );
+
+      await queue!.push(async () => {
+        // For each import, create a new container object (named after the file basename),
+        // import the scene under it, then report the immediate children with their tree bounds.
+        for (const entry of imports as any[]) {
+          const scenePath = (entry as any)?.path;
+          // Create container object at root
+          const containerId = randomUUID();
+          let effectiveContainerId: string = containerId as unknown as string;
+          const containerObj = (data.objects as any)[containerId];
+          const baseName = getBasename(scenePath);
+          containerObj.name = baseName;
+
+          // Snapshot existing object IDs to detect new ones created by this import
+          const beforeIds = new Set(Object.keys(data.objects as any));
+          console.log(
+            "[import_scenes] container:",
+            containerId,
+            "before count:",
+            beforeIds.size
+          );
+
+          // Import under the created container
+          await tools.loadScene(scenePath, { parent: containerId });
+
+          // Compute set of new object IDs
+          const allObjects: Record<string, any> = data.objects as any;
+          const newIds = new Set<string>();
+          for (const id of Object.keys(allObjects))
+            if (!beforeIds.has(id)) newIds.add(id);
+          console.log(
+            "[import_scenes] after count:",
+            Object.keys(allObjects).length,
+            "new ids:",
+            Array.from(newIds)
+          );
+
+          // Imported roots are the newly created objects that are direct children of the container
+          const importedRootIds: string[] = [];
+          for (const id of newIds) {
+            const p = allObjects[id]?.parent;
+            if (p != null && String(p) === String(containerId)) {
+              importedRootIds.push(id);
+            }
+            console.log(
+              "[import_scenes] candidate id:",
+              id,
+              "parent:",
+              p,
+              "match:",
+              String(p) === String(containerId)
+            );
+          }
+
+          console.log("[import_scenes] imported root ids:", importedRootIds);
+
+          // Fallback: some importers may ignore the requested parent. If exactly one
+          // new object was created, assume it's the imported root and use it as container.
+          if (importedRootIds.length === 0) {
+            const newArr = Array.from(newIds);
+            if (newArr.length === 1) {
+              const rid = newArr[0];
+              importedRootIds.push(rid);
+              // Set container to the same id and apply the basename to help users identify it
+              // if it didn't already have a meaningful name.
+              try {
+                effectiveContainerId = rid as unknown as string;
+                allObjects[rid].name = baseName;
+              } catch {}
+              console.log(
+                "[import_scenes] fallback: using",
+                rid,
+                "as container and root"
+              );
+            }
+          }
+
+          // Compute bounds per imported root
+          for (const oid of importedRootIds) {
+            const { bounds: b, count } = computeTreeBounds(oid);
+            if (b) {
+              results.push({
+                id: oid,
+                rootId: oid,
+                containerId: effectiveContainerId,
+                bounds: { min: [b[0], b[1], b[2]], max: [b[3], b[4], b[5]] },
+                count,
+              });
+            } else {
+              results.push({
+                id: oid,
+                rootId: oid,
+                containerId: effectiveContainerId,
+                bounds: null,
+                count,
+              });
+            }
+          }
+        }
       });
 
-      return { content: [{ type: "text", text: "Done." }] };
+      return {
+        content: results.map((r) => ({
+          type: "text",
+          text: JSON.stringify(r),
+        })),
+      };
     } catch (error: any) {
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
