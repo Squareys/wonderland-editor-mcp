@@ -51,14 +51,24 @@ export const querySettingsSchema = {
 
 export const modifySettingsSchema = {
   changeSettings: SafeRecord.optional().describe(
-    'Object of settings to override. Nested settings would be specified as {"physics": {"enabled": true}}.'
+    'Nested partial settings object to merge (preferred for structured updates). Example: {"physx": {"enable": true}, "editor": {"importPhysicalAsPhongMaterials": true}}. Legacy aliases accepted: "physics" -> "physx", "editor.importPhysicalAsPhong" -> "editor.importPhysicalAsPhongMaterials".'
+  ),
+  setPaths: SafeRecord.optional().describe(
+    'Alternative to changeSettings: flat map of dot-separated setting paths to values, e.g. {"physx.enable": true, "editor.importPhysicalAsPhongMaterials": true}. Will be merged into changeSettings internally.'
   ),
   resetSettings: z
     .string()
     .array()
     .optional()
     .describe(
-      "Settings paths to reset, separated by '.', e.g. physics.enabled"
+      "List of setting paths to delete/reset (dot notation). Example: ['physx.enable']. Alias of resetPaths. Legacy paths (physics.enabled) are mapped automatically."
+    ),
+  resetPaths: z
+    .string()
+    .array()
+    .optional()
+    .describe(
+      "Alias for resetSettings (preferred name). Settings paths to reset, separated by '.'"
     ),
 };
 

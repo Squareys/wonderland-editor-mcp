@@ -159,21 +159,122 @@ server.registerTool(
     description: "Modify the project settings.",
     inputSchema: modifySettingsSchema,
   },
-  async ({ changeSettings, resetSettings }) => {
+  async ({ changeSettings, setPaths, resetSettings, resetPaths }) => {
     try {
-      resetSettings?.forEach((key) => {
-        const split = key.split(".");
-
-        let setting = data.settings;
-        for (const k of split.splice(0, split.length - 1)) {
-          // @ts-ignore
-          setting = setting[k];
+      // Helper to normalize alias paths to canonical ones
+      const normalizePath = (p: string) => {
+        if (p.startsWith("physics")) {
+          p = p.replace(/^physics(\.|$)/, (m) => m.replace("physics", "physx"));
         }
-        // @ts-ignore
-        delete setting[split[0]];
+        p = p.replace(
+          /editor\.importPhysicalAsPhong(?!Materials)/,
+          "editor.importPhysicalAsPhongMaterials"
+        );
+        return p;
+      };
+
+      // Normalize setPaths keys first (store in new object if changed)
+      if (setPaths) {
+        const normalized: Record<string, any> = {};
+        for (const [k, v] of Object.entries(setPaths)) {
+          normalized[normalizePath(k)] = v;
+        }
+        setPaths = normalized;
+      }
+
+      // Normalize changeSettings aliases by cloning & remapping keys
+      const normalizeChangeObject = (obj: any): any => {
+        if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj;
+        const out: any = Array.isArray(obj) ? [] : {};
+        for (const [k, v] of Object.entries(obj)) {
+          let nk = k;
+            if (k === "physics") nk = "physx";
+            if (k === "importPhysicalAsPhong") nk = "importPhysicalAsPhongMaterials";
+          // Recurse
+          out[nk] = normalizeChangeObject(v);
+        }
+        return out;
+      };
+      if (changeSettings) {
+        changeSettings = normalizeChangeObject(changeSettings);
+      }
+
+      // Normalize reset paths (both arrays) and dedupe
+      const allResetRaw = [...(resetSettings || []), ...(resetPaths || [])];
+      const allReset = Array.from(new Set(allResetRaw.map(normalizePath)));
+      allReset.forEach((key) => {
+        const split = key.split(".");
+        try {
+          let setting: any = data.settings;
+          for (const k of split.slice(0, -1)) {
+            setting = setting[k];
+            if (setting === undefined || setting === null) return; // nothing to delete
+          }
+          delete setting[split[split.length - 1]];
+        } catch {
+          // Ignore missing alias path
+        }
       });
 
-      if (changeSettings) assignNested(data.settings, changeSettings);
+      // If setPaths provided, fold them into changeSettings structure
+  if (setPaths && Object.keys(setPaths).length) {
+        changeSettings = changeSettings ? { ...changeSettings } : {};
+        for (const [path, value] of Object.entries(setPaths)) {
+          const parts = path.split('.');
+          let cursor: any = changeSettings;
+            for (let i = 0; i < parts.length; i++) {
+              const p = parts[i];
+              if (i === parts.length - 1) {
+                cursor[p] = value;
+              } else {
+                if (typeof cursor[p] !== 'object' || cursor[p] === null || Array.isArray(cursor[p])) {
+                  cursor[p] = {};
+                }
+                cursor = cursor[p];
+              }
+            }
+        }
+      }
+
+      if (changeSettings) {
+        // Recursively ensure all object paths exist before assignment to avoid
+        // path validation errors ("Path does not exist: /settings/xyz").
+        const ensurePaths = (target: any, source: any) => {
+          for (const key of Object.keys(source)) {
+            const val = source[key];
+            let existing: any;
+            try {
+              existing = target[key];
+            } catch (e) {
+              // Accessing missing path on editor settings proxy may throw ReferenceError
+              existing = undefined;
+            }
+            if (val && typeof val === "object" && !Array.isArray(val)) {
+              if (typeof existing !== "object" || existing === null) {
+                try {
+                  target[key] = {};
+                  existing = target[key];
+                } catch (e) {
+                  // If even creation fails, skip to avoid crashing tool
+                  continue;
+                }
+              }
+              ensurePaths(existing, val);
+            } else {
+              // Leaf: ensure parent container exists (handled above). No direct assignment yet.
+              if (existing === undefined) {
+                try {
+                  // Prepare empty container if leaf is an object (already handled) else do nothing.
+                } catch (e) {
+                  /* ignore */
+                }
+              }
+            }
+          }
+        };
+  ensurePaths((data as any).settings, changeSettings);
+  assignNested(data.settings, changeSettings);
+      }
 
       return {
         content: [
