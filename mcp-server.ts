@@ -18,8 +18,7 @@ import {
   assignComponentProperties,
   assignNested,
   filterObjectProperties,
-  computeTreeBounds as computeTreeBoundsUtil,
-  computeObjectBounds as computeObjectBoundsUtil,
+  computeTreeBounds,
   getBasename,
 } from "./utils.js";
 
@@ -29,7 +28,7 @@ const jsComponentPropsByObjectType = new Map<string, any>();
 
 export const server = new McpServer({
   name: "Wonderland Editor",
-  version: "0.2.0",
+  version: "0.3.0",
 });
 let queue: WorkQueue | null = null;
 export function setQueue(q: WorkQueue) {
@@ -217,22 +216,26 @@ server.registerTool(
       });
 
       // If setPaths provided, fold them into changeSettings structure
-  if (setPaths && Object.keys(setPaths).length) {
+      if (setPaths && Object.keys(setPaths).length) {
         changeSettings = changeSettings ? { ...changeSettings } : {};
         for (const [path, value] of Object.entries(setPaths)) {
-          const parts = path.split('.');
+          const parts = path.split(".");
           let cursor: any = changeSettings;
-            for (let i = 0; i < parts.length; i++) {
-              const p = parts[i];
-              if (i === parts.length - 1) {
-                cursor[p] = value;
-              } else {
-                if (typeof cursor[p] !== 'object' || cursor[p] === null || Array.isArray(cursor[p])) {
-                  cursor[p] = {};
-                }
-                cursor = cursor[p];
+          for (let i = 0; i < parts.length; i++) {
+            const p = parts[i];
+            if (i === parts.length - 1) {
+              cursor[p] = value;
+            } else {
+              if (
+                typeof cursor[p] !== "object" ||
+                cursor[p] === null ||
+                Array.isArray(cursor[p])
+              ) {
+                cursor[p] = {};
               }
+              cursor = cursor[p];
             }
+          }
         }
       }
 
@@ -272,8 +275,8 @@ server.registerTool(
             }
           }
         };
-  ensurePaths((data as any).settings, changeSettings);
-  assignNested(data.settings, changeSettings);
+        ensurePaths((data as any).settings, changeSettings);
+        assignNested(data.settings, changeSettings);
       }
 
       return {
@@ -589,7 +592,7 @@ server.registerTool(
 
           // Compute bounds per imported root
           for (const oid of importedRootIds) {
-            const { bounds: b, count } = computeTreeBounds(oid);
+            const { bounds: b, count } = computeTreeBounds(oid, data.objects);
             if (b) {
               const minOut: [number, number, number] = [b[0], b[1], b[2]];
               const maxOut: [number, number, number] = [b[3], b[4], b[5]];
@@ -695,12 +698,7 @@ server.registerTool(
   async ({ objectIds }: { objectIds: string[] }) => {
     try {
       const out = objectIds.map((oid: string) => {
-        const { bounds: b, count } = computeTreeBoundsUtil(
-          oid,
-          data.objects as any,
-          (meshId: string, outArr: Float32Array) =>
-            tools.computeMeshBounds(meshId, outArr)
-        );
+        const { bounds: b, count } = computeTreeBounds(oid, data.objects);
         if (b) {
           const minOut: [number, number, number] = [b[0], b[1], b[2]];
           const maxOut: [number, number, number] = [b[3], b[4], b[5]];
