@@ -1,20 +1,10 @@
-import {
-  McpServer,
-  ResourceTemplate,
-  ReadResourceTemplateCallback,
-} from "@modelcontextprotocol/sdk/server/mcp.js";
-import {
-  EditorData,
-  Resource,
-  data,
-  tools,
-} from "@wonderlandengine/editor-api";
-
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { data, tools } from "@wonderlandengine/editor-api";
 import { WorkQueue } from "./utils/work-queue.js";
 import { randomUUID } from "crypto";
 import {
-  ResourceTypes,
   computeMeshBoundsSchema,
+  computeObjectBoundsSchema,
   deleteObjectsSchema,
   importFilesSchema,
   importSceneFilesSchema,
@@ -28,21 +18,35 @@ import {
   assignComponentProperties,
   assignNested,
   filterObjectProperties,
-  joinBounds,
-  scaleBounds,
   computeTreeBounds as computeTreeBoundsUtil,
+  computeObjectBounds as computeObjectBoundsUtil,
   getBasename,
 } from "./utils.js";
-import { PaginatedResultSchema } from "@modelcontextprotocol/sdk/types.js";
+
+// JS component property caches (per object-component index and per object+type fallback)
+const jsComponentProps = new Map<string, any>();
+const jsComponentPropsByObjectType = new Map<string, any>();
 
 export const server = new McpServer({
   name: "Wonderland Editor",
-  version: "0.1.0",
+  version: "0.2.0",
 });
-
 let queue: WorkQueue | null = null;
 export function setQueue(q: WorkQueue) {
   queue = q;
+}
+
+// Utility: stable iteration over component container (array or numeric-keyed object)
+function iterateComponentSlots(container: any): any[] {
+  if (!container) return [];
+  if (Array.isArray(container)) return container.slice();
+  if (typeof container === "object") {
+    return Object.keys(container)
+      .filter((k) => !isNaN(Number(k)))
+      .sort((a, b) => Number(a) - Number(b))
+      .map((k) => container[k]);
+  }
+  return [];
 }
 
 server.registerTool(
@@ -113,8 +117,12 @@ server.registerTool(
         })),
       };
     } catch (error: any) {
-      console.error("Validation errors:", error, error?.errors ?? "");
-      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+      const msg = (error && (error.errors || error.message)) ?? "Unknown error";
+      console.error("query_resources error:", error);
+      throw new Error(
+        "Invalid arguments: " +
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
+      );
     }
   }
 );
@@ -176,8 +184,12 @@ server.registerTool(
         ],
       };
     } catch (error: any) {
+      const msg = (error && (error.errors || error.message)) ?? "Unknown error";
       console.error("Validation errors:", error, error?.errors ?? "");
-      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+      throw new Error(
+        "Invalid arguments: " +
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
+      );
     }
   }
 );
@@ -201,8 +213,12 @@ server.registerTool(
         content: [{ type: "text", text: "Done." }],
       };
     } catch (error: any) {
+      const msg = (error && (error.errors || error.message)) ?? "Unknown error";
       console.error("Validation errors:", error, error?.errors ?? "");
-      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+      throw new Error(
+        "Invalid arguments: " +
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
+      );
     }
   }
 );
@@ -212,7 +228,7 @@ server.registerTool(
   {
     title: "Modify Objects",
     description:
-      "Create or modify an objects in the Wonderland Engine project. " +
+      "Create or modify objects in the Wonderland Engine project. " +
       "Properties not specified in modifications are kept as-is.",
     inputSchema: modifyObjectsSchema,
   },
@@ -283,10 +299,16 @@ server.registerTool(
             });
           }
         }
+      });
+      return { content: [{ type: "text", text: "Done." }] };
+    } catch (error: any) {
+      const msg = (error && (error.errors || error.message)) ?? "Unknown error";
+      console.error("modify_objects error:", error);
+      throw new Error(
+        "Invalid arguments: " +
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
       );
-    });
-
-    return { content: [{ type: "text", text: "Done." }] };
+    }
   }
 );
 
@@ -323,8 +345,12 @@ server.registerTool(
 
       return { content: [{ type: "text", text: "Done." }] };
     } catch (error: any) {
+      const msg = (error && (error.errors || error.message)) ?? "Unknown error";
       console.error("Validation errors:", error, error?.errors ?? "");
-      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+      throw new Error(
+        "Invalid arguments: " +
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
+      );
     }
   }
 );
@@ -366,15 +392,28 @@ server.registerTool(
         // import the scene under it, then report the immediate children with their tree bounds.
         for (const entry of imports as any[]) {
           const scenePath = (entry as any)?.path;
-          // Create container object at root
+          // Create container object at root (ensure a valid record exists)
           const containerId = randomUUID();
           let effectiveContainerId: string = containerId as unknown as string;
-          const containerObj = (data.objects as any)[containerId];
+          const allObjects: Record<string, any> = data.objects as any;
           const baseName = getBasename(scenePath);
-          containerObj.name = baseName;
+          if (!allObjects[containerId]) {
+            allObjects[containerId] = {
+              name: baseName,
+              parent: null,
+              translation: [0, 0, 0],
+              rotation: [0, 0, 0, 1],
+              scaling: [1, 1, 1],
+              components: {},
+              skin: null,
+            };
+          } else {
+            allObjects[containerId].name = baseName;
+            allObjects[containerId].parent = null;
+          }
 
           // Snapshot existing object IDs to detect new ones created by this import
-          const beforeIds = new Set(Object.keys(data.objects as any));
+          const beforeIds = new Set(Object.keys(allObjects));
           console.log(
             "[import_scenes] container:",
             containerId,
@@ -386,7 +425,6 @@ server.registerTool(
           await tools.loadScene(scenePath, { parent: containerId });
 
           // Compute set of new object IDs
-          const allObjects: Record<string, any> = data.objects as any;
           const newIds = new Set<string>();
           for (const id of Object.keys(allObjects))
             if (!beforeIds.has(id)) newIds.add(id);
@@ -396,6 +434,17 @@ server.registerTool(
             "new ids:",
             Array.from(newIds)
           );
+
+          // Ensure all newly created root objects are parented to the container
+          // Some importers may ignore the parent option. If a new object has no parent
+          // or its parent is not another new object, treat it as a root and reparent it.
+          for (const id of newIds) {
+            const p = allObjects[id]?.parent;
+            const parentInNewSet = p != null && newIds.has(String(p));
+            if (p == null || !parentInNewSet) {
+              allObjects[id].parent = containerId;
+            }
+          }
 
           // Imported roots are the newly created objects that are direct children of the container
           const importedRootIds: string[] = [];
@@ -441,11 +490,13 @@ server.registerTool(
           for (const oid of importedRootIds) {
             const { bounds: b, count } = computeTreeBounds(oid);
             if (b) {
+              const minOut: [number, number, number] = [b[0], b[1], b[2]];
+              const maxOut: [number, number, number] = [b[3], b[4], b[5]];
               results.push({
                 id: oid,
                 rootId: oid,
                 containerId: effectiveContainerId,
-                bounds: { min: [b[0], b[1], b[2]], max: [b[3], b[4], b[5]] },
+                bounds: { min: minOut, max: maxOut },
                 count,
               });
             } else {
@@ -468,8 +519,12 @@ server.registerTool(
         })),
       };
     } catch (error: any) {
-      console.error("Validation errors:", error, error?.errors ?? "");
-      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+      const msg = (error && (error.errors || error.message)) ?? "Unknown error";
+      console.error("[import_scenes] Error:", error);
+      throw new Error(
+        "Invalid arguments: " +
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
+      );
     }
   }
 );
@@ -489,8 +544,12 @@ server.registerTool(
 
       return { content: [{ type: "text", text: "Done." }] };
     } catch (error: any) {
+      const msg = (error && (error.errors || error.message)) ?? "Unknown error";
       console.error("Validation errors:", error, error?.errors ?? "");
-      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+      throw new Error(
+        "Invalid arguments: " +
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
+      );
     }
   }
 );
@@ -514,8 +573,51 @@ server.registerTool(
         content: bounds.map((b) => ({ type: "text", text: JSON.stringify(b) })),
       };
     } catch (error: any) {
+      const msg = (error && (error.errors || error.message)) ?? "Unknown error";
       console.error("Validation errors:", error, error?.errors ?? "");
-      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
+      throw new Error(
+        "Invalid arguments: " +
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
+      );
+    }
+  }
+);
+
+server.registerTool(
+  "compute_object_bounds",
+  {
+    title: "Compute Object Bounds",
+    description:
+      "Compute aggregated subtree bounds for the given object IDs (including children).",
+    inputSchema: computeObjectBoundsSchema,
+  },
+  async ({ objectIds }: { objectIds: string[] }) => {
+    try {
+      const out = objectIds.map((oid: string) => {
+        const { bounds: b, count } = computeTreeBoundsUtil(
+          oid,
+          data.objects as any,
+          (meshId: string, outArr: Float32Array) =>
+            tools.computeMeshBounds(meshId, outArr)
+        );
+        if (b) {
+          const minOut: [number, number, number] = [b[0], b[1], b[2]];
+          const maxOut: [number, number, number] = [b[3], b[4], b[5]];
+          return { id: oid, count, bounds: { min: minOut, max: maxOut } };
+        }
+        return { id: oid, count, bounds: null };
+      });
+
+      return {
+        content: out.map((e) => ({ type: "text", text: JSON.stringify(e) })),
+      };
+    } catch (error: any) {
+      const msg = (error && (error.errors || error.message)) ?? "Unknown error";
+      console.error("Validation errors:", error, error?.errors ?? "");
+      throw new Error(
+        "Invalid arguments: " +
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
+      );
     }
   }
 );

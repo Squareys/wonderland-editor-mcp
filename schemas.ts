@@ -97,7 +97,7 @@ export const modifyObjectsSchema = {
       addComponents: z
         .object({
           type: z.string(),
-          properties: z.record(z.string(), z.any()),
+          properties: z.record(z.string(), z.any()).optional(),
         })
         .array()
         .describe(
@@ -107,7 +107,7 @@ export const modifyObjectsSchema = {
       modifyComponents: z
         .object({
           index: z.number(),
-          properties: z.record(z.string(), z.any()),
+          properties: z.record(z.string(), z.any()).optional(),
         })
         .array()
         .describe("Components to modify on the object.")
@@ -159,4 +159,8 @@ export const importFilesSchema = {
 
 export const computeMeshBoundsSchema = {
   meshIds: z.string().array(),
+};
+
+export const computeObjectBoundsSchema = {
+  objectIds: z.string().array(),
 };

@@ -182,9 +182,9 @@ export interface TreeBoundsResult {
 
 /**
  * Recursively computes the axis-aligned bounds for an object subtree and counts descendants.
- * - Mesh bounds are merged per object and scaled by the object's scaling.
- * - Child subtree bounds are merged after being scaled by the parent's scaling.
- * - Rotation/translation are ignored by design here, as per tool requirements.
+ * - Mesh bounds are merged per object and transformed by the object's full SRT (scale, rotation, translation).
+ * - Child subtree bounds are computed in world space via hierarchical SRT and merged into the parent accumulator.
+ * - Handles negative scales and arbitrary rotations via center/extent AABB transform.
  *
  * This function is environment-agnostic; pass in the objects map and a computeMeshBounds callback.
  */
@@ -193,56 +193,250 @@ export function computeTreeBounds(
   objects: Record<string, any>,
   computeMeshBoundsFn: (meshId: string, out: Float32Array) => void
 ): TreeBoundsResult {
-  const obj = objects[objectId];
-  if (!obj) return { bounds: null, count: 0 };
+  // --- Math helpers (row-major, column-vector) ---
+  const mat3IdentityRM = (): Float32Array =>
+    new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
 
-  let count = 0; // count descendants only (exclude self)
-  const acc = new Float32Array(6);
-  const s1 = new Float32Array(6);
-  let has = false;
+  const quatToMat3RM = (
+    q: number[] | Float32Array | undefined
+  ): Float32Array => {
+    // Read real part only if dual quaternion passed
+    const x = q?.[0] ?? 0;
+    const y = q?.[1] ?? 0;
+    const z = q?.[2] ?? 0;
+    const w = q?.[3] ?? 1;
+    const x2 = x + x,
+      y2 = y + y,
+      z2 = z + z;
+    const xx = x * x2,
+      xy = x * y2,
+      xz = x * z2;
+    const yy = y * y2,
+      yz = y * z2,
+      zz = z * z2;
+    const wx = w * x2,
+      wy = w * y2,
+      wz = w * z2;
+    // Row-major layout
+    return new Float32Array([
+      1 - (yy + zz),
+      xy + wz,
+      xz - wy,
+      xy - wz,
+      1 - (xx + zz),
+      yz + wx,
+      xz + wy,
+      yz - wx,
+      1 - (xx + yy),
+    ]);
+  };
 
-  // Self mesh components
-  const comps = (obj.components ?? []) as any[];
-  for (const comp of comps) {
-    if (!comp || comp.type !== "mesh") continue;
-    const meshId = comp?.mesh?.mesh as string | null;
-    if (!meshId) continue;
-    const mb = new Float32Array(6);
+  const mulMat3RM = (a: Float32Array, b: Float32Array): Float32Array => {
+    const out = new Float32Array(9);
+    // out = a * b (row-major)
+    out[0] = a[0] * b[0] + a[1] * b[3] + a[2] * b[6];
+    out[1] = a[0] * b[1] + a[1] * b[4] + a[2] * b[7];
+    out[2] = a[0] * b[2] + a[1] * b[5] + a[2] * b[8];
+
+    out[3] = a[3] * b[0] + a[4] * b[3] + a[5] * b[6];
+    out[4] = a[3] * b[1] + a[4] * b[4] + a[5] * b[7];
+    out[5] = a[3] * b[2] + a[4] * b[5] + a[5] * b[8];
+
+    out[6] = a[6] * b[0] + a[7] * b[3] + a[8] * b[6];
+    out[7] = a[6] * b[1] + a[7] * b[4] + a[8] * b[7];
+    out[8] = a[6] * b[2] + a[7] * b[5] + a[8] * b[8];
+    return out;
+  };
+
+  const mulMat3Vec3RM = (
+    m: Float32Array,
+    v: number[] | Float32Array
+  ): Float32Array => {
+    const x = (v as any)?.[0] ?? 0,
+      y = (v as any)?.[1] ?? 0,
+      z = (v as any)?.[2] ?? 0;
+    return new Float32Array([
+      m[0] * x + m[1] * y + m[2] * z,
+      m[3] * x + m[4] * y + m[5] * z,
+      m[6] * x + m[7] * y + m[8] * z,
+    ]);
+  };
+
+  const buildLocalLinearRM = (
+    rotation: number[] | Float32Array | undefined,
+    scaling: number[] | Float32Array | undefined
+  ): Float32Array => {
+    const r = quatToMat3RM(rotation);
+    const sx = (scaling as any)?.[0] ?? 1;
+    const sy = (scaling as any)?.[1] ?? 1;
+    const sz = (scaling as any)?.[2] ?? 1;
+    // R * S (row-major): multiply by diagonal scale
+    const s = new Float32Array([sx, 0, 0, 0, sy, 0, 0, 0, sz]);
+    return mulMat3RM(r, s);
+  };
+
+  const transformAabbCornersRM = (
+    out: Float32Array,
+    src: Float32Array,
+    linearRM: Float32Array,
+    translation: number[] | Float32Array
+  ): Float32Array => {
+    const minx = src[0],
+      miny = src[1],
+      minz = src[2],
+      maxx = src[3],
+      maxy = src[4],
+      maxz = src[5];
+    const t = translation as any;
+    const tx = t?.[0] ?? 0,
+      ty = t?.[1] ?? 0,
+      tz = t?.[2] ?? 0;
+
+    // Iterate 8 corners
+    let wminx = Infinity,
+      wminy = Infinity,
+      wminz = Infinity,
+      wmaxx = -Infinity,
+      wmaxy = -Infinity,
+      wmaxz = -Infinity;
+
+    const corners: [number, number, number][] = [
+      [minx, miny, minz],
+      [minx, miny, maxz],
+      [minx, maxy, minz],
+      [minx, maxy, maxz],
+      [maxx, miny, minz],
+      [maxx, miny, maxz],
+      [maxx, maxy, minz],
+      [maxx, maxy, maxz],
+    ];
+
+    for (const c of corners) {
+      const p = mulMat3Vec3RM(linearRM, c);
+      const px = p[0] + tx,
+        py = p[1] + ty,
+        pz = p[2] + tz;
+      if (px < wminx) wminx = px;
+      if (py < wminy) wminy = py;
+      if (pz < wminz) wminz = pz;
+      if (px > wmaxx) wmaxx = px;
+      if (py > wmaxy) wmaxy = py;
+      if (pz > wmaxz) wmaxz = pz;
+    }
+
+    out[0] = wminx;
+    out[1] = wminy;
+    out[2] = wminz;
+    out[3] = wmaxx;
+    out[4] = wmaxy;
+    out[5] = wmaxz;
+    return out;
+  };
+
+  // Recursive computation carrying world linear matrix (3x3) and world translation
+  const computeRecursive = (
+    oid: string,
+    parentLinearRM: Float32Array,
+    parentTranslation: number[] | Float32Array
+  ): TreeBoundsResult => {
+    const obj = objects[oid];
+    if (!obj) return { bounds: null, count: 0 };
+
     try {
-      computeMeshBoundsFn(meshId, mb);
-      scaleBounds(s1, mb, obj.scaling ?? [1, 1, 1]);
-      if (!has) {
-        copyBounds(acc, s1);
-        has = true;
-      } else {
-        joinBounds(acc, acc, s1);
-      }
-    } catch {
-      // Ignore compute errors per component
-    }
-  }
+      // Debug current object's local SRT for diagnostics
+      console.log(
+        "[computeTreeBounds] oid:",
+        oid,
+        "name:",
+        obj?.name,
+        "local T:",
+        obj?.translation,
+        "local R(q):",
+        obj?.rotation,
+        "local S:",
+        obj?.scaling
+      );
+    } catch {}
 
-  // Children
-  for (const [cid, child] of Object.entries(objects)) {
-    if (!child || child.parent !== objectId) continue;
-    const { bounds: cb, count: cc } = computeTreeBounds(
-      cid,
-      objects,
-      computeMeshBoundsFn
-    );
-    count += 1 + cc; // include the child itself plus its descendants
-    if (cb) {
-      scaleBounds(s1, cb, obj.scaling ?? [1, 1, 1]);
-      if (!has) {
-        copyBounds(acc, s1);
-        has = true;
-      } else {
-        joinBounds(acc, acc, s1);
+    const localLinearRM = buildLocalLinearRM(obj.rotation, obj.scaling);
+    const worldLinearRM = mulMat3RM(parentLinearRM, localLinearRM);
+    const localT = obj.translation ?? [0, 0, 0];
+    const worldT = mulMat3Vec3RM(parentLinearRM, localT);
+    worldT[0] += (parentTranslation as any)?.[0] ?? 0;
+    worldT[1] += (parentTranslation as any)?.[1] ?? 0;
+    worldT[2] += (parentTranslation as any)?.[2] ?? 0;
+
+    let count = 0;
+    const acc = new Float32Array(6);
+    const tmp = new Float32Array(6);
+    let has = false;
+
+    // Self mesh components (components is an object keyed by index)
+    const comps = Object.values(obj.components ?? {}) as any[];
+    for (const comp of comps) {
+      if (!comp || comp.type !== "mesh") continue;
+      const meshId = comp?.mesh?.mesh as string | null;
+      if (!meshId) continue;
+      try {
+        const mb = new Float32Array(6);
+        computeMeshBoundsFn(meshId, mb);
+        try {
+          console.log("[computeTreeBounds] raw mesh bounds:", Array.from(mb));
+        } catch {}
+        transformAabbCornersRM(tmp, mb, worldLinearRM, worldT);
+        try {
+          console.log(
+            "[computeTreeBounds] transformed bounds:",
+            Array.from(tmp)
+          );
+        } catch {}
+        if (!has) {
+          copyBounds(acc, tmp);
+          has = true;
+        } else {
+          joinBounds(acc, acc, tmp);
+        }
+      } catch {
+        // Ignore compute errors per component
       }
     }
-  }
 
-  return { bounds: has ? acc : null, count };
+    // Children
+    for (const [cid, child] of Object.entries(objects)) {
+      if (!child) continue;
+      if (String(child.parent) !== String(oid)) continue;
+      const { bounds: cb, count: cc } = computeRecursive(
+        cid,
+        worldLinearRM,
+        worldT
+      );
+      count += 1 + cc; // include the child and its descendants
+      if (cb) {
+        if (!has) {
+          copyBounds(acc, cb);
+          has = true;
+        } else {
+          joinBounds(acc, acc, cb);
+        }
+      }
+    }
+
+    return { bounds: has ? acc : null, count };
+  };
+
+  return computeRecursive(objectId, mat3IdentityRM(), [0, 0, 0]);
+}
+
+/**
+ * Convenience wrapper to compute an object's aggregated subtree bounds and descendant count.
+ * Delegates to computeTreeBounds with identity world transform.
+ */
+export function computeObjectBounds(
+  objectId: string,
+  objects: Record<string, any>,
+  computeMeshBoundsFn: (meshId: string, out: Float32Array) => void
+): TreeBoundsResult {
+  return computeTreeBounds(objectId, objects, computeMeshBoundsFn);
 }
 
 /** Cross-platform basename without relying on Node 'path'. */
