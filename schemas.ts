@@ -51,24 +51,14 @@ export const querySettingsSchema = {
 
 export const modifySettingsSchema = {
   changeSettings: SafeRecord.optional().describe(
-    'Nested partial settings object to merge (preferred for structured updates). Example: {"physx": {"enable": true}, "editor": {"importPhysicalAsPhongMaterials": true}}. Legacy aliases accepted: "physics" -> "physx", "editor.importPhysicalAsPhong" -> "editor.importPhysicalAsPhongMaterials".'
+    'Nested partial settings object to merge. Example: {"physx": {"enable": true}, "editor": {"importPhysicalAsPhongMaterials": true}}.'
   ),
-  setPaths: SafeRecord.optional().describe(
-    'Alternative to changeSettings: flat map of dot-separated setting paths to values, e.g. {"physx.enable": true, "editor.importPhysicalAsPhongMaterials": true}. Will be merged into changeSettings internally.'
-  ),
-  resetSettings: z
-    .string()
-    .array()
-    .optional()
-    .describe(
-      "List of setting paths to delete/reset (dot notation). Example: ['physx.enable']. Alias of resetPaths. Legacy paths (physics.enabled) are mapped automatically."
-    ),
   resetPaths: z
     .string()
     .array()
     .optional()
     .describe(
-      "Alias for resetSettings (preferred name). Settings paths to reset, separated by '.'"
+      "Settings paths to reset, separated by '.', e.g. `editor.importPhysicalAsPhongMaterials`"
     ),
 };
 
@@ -80,7 +70,7 @@ export const modifyObjectsSchema = {
   modifications: z
     .object({
       name: z.string().describe("Name for the object").optional(),
-      id: z.string().describe("ID of the object").optional(),
+      id: z.string().describe("ID of the object. Creates a new object, if not set.").optional(),
       parentId: z
         .string()
         .nullable()

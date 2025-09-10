@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { data, tools } from "@wonderlandengine/editor-api";
+import { data, ObjectResource, tools } from "@wonderlandengine/editor-api";
 import { WorkQueue } from "./utils/work-queue.js";
 import { randomUUID } from "crypto";
 import {
@@ -120,10 +120,10 @@ server.registerTool(
       console.error("query_resources error:", error);
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg))
+          (typeof msg === "string" ? msg : JSON.stringify(msg)),
       );
     }
-  }
+  },
 );
 
 server.registerTool(
@@ -148,7 +148,7 @@ server.registerTool(
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
     }
-  }
+  },
 );
 
 server.registerTool(
@@ -158,50 +158,10 @@ server.registerTool(
     description: "Modify the project settings.",
     inputSchema: modifySettingsSchema,
   },
-  async ({ changeSettings, setPaths, resetSettings, resetPaths }) => {
+  async ({ changeSettings, resetPaths }) => {
     try {
-      // Helper to normalize alias paths to canonical ones
-      const normalizePath = (p: string) => {
-        if (p.startsWith("physics")) {
-          p = p.replace(/^physics(\.|$)/, (m) => m.replace("physics", "physx"));
-        }
-        p = p.replace(
-          /editor\.importPhysicalAsPhong(?!Materials)/,
-          "editor.importPhysicalAsPhongMaterials"
-        );
-        return p;
-      };
-
-      // Normalize setPaths keys first (store in new object if changed)
-      if (setPaths) {
-        const normalized: Record<string, any> = {};
-        for (const [k, v] of Object.entries(setPaths)) {
-          normalized[normalizePath(k)] = v;
-        }
-        setPaths = normalized;
-      }
-
-      // Normalize changeSettings aliases by cloning & remapping keys
-      const normalizeChangeObject = (obj: any): any => {
-        if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj;
-        const out: any = Array.isArray(obj) ? [] : {};
-        for (const [k, v] of Object.entries(obj)) {
-          let nk = k;
-            if (k === "physics") nk = "physx";
-            if (k === "importPhysicalAsPhong") nk = "importPhysicalAsPhongMaterials";
-          // Recurse
-          out[nk] = normalizeChangeObject(v);
-        }
-        return out;
-      };
-      if (changeSettings) {
-        changeSettings = normalizeChangeObject(changeSettings);
-      }
-
-      // Normalize reset paths (both arrays) and dedupe
-      const allResetRaw = [...(resetSettings || []), ...(resetPaths || [])];
-      const allReset = Array.from(new Set(allResetRaw.map(normalizePath)));
-      allReset.forEach((key) => {
+      let errors = [];
+      resetPaths?.forEach((key) => {
         const split = key.split(".");
         try {
           let setting: any = data.settings;
@@ -211,71 +171,11 @@ server.registerTool(
           }
           delete setting[split[split.length - 1]];
         } catch {
-          // Ignore missing alias path
+          errors.push(`Could not reset setting at path ${key} - not found.`);
         }
       });
 
-      // If setPaths provided, fold them into changeSettings structure
-      if (setPaths && Object.keys(setPaths).length) {
-        changeSettings = changeSettings ? { ...changeSettings } : {};
-        for (const [path, value] of Object.entries(setPaths)) {
-          const parts = path.split(".");
-          let cursor: any = changeSettings;
-          for (let i = 0; i < parts.length; i++) {
-            const p = parts[i];
-            if (i === parts.length - 1) {
-              cursor[p] = value;
-            } else {
-              if (
-                typeof cursor[p] !== "object" ||
-                cursor[p] === null ||
-                Array.isArray(cursor[p])
-              ) {
-                cursor[p] = {};
-              }
-              cursor = cursor[p];
-            }
-          }
-        }
-      }
-
       if (changeSettings) {
-        // Recursively ensure all object paths exist before assignment to avoid
-        // path validation errors ("Path does not exist: /settings/xyz").
-        const ensurePaths = (target: any, source: any) => {
-          for (const key of Object.keys(source)) {
-            const val = source[key];
-            let existing: any;
-            try {
-              existing = target[key];
-            } catch (e) {
-              // Accessing missing path on editor settings proxy may throw ReferenceError
-              existing = undefined;
-            }
-            if (val && typeof val === "object" && !Array.isArray(val)) {
-              if (typeof existing !== "object" || existing === null) {
-                try {
-                  target[key] = {};
-                  existing = target[key];
-                } catch (e) {
-                  // If even creation fails, skip to avoid crashing tool
-                  continue;
-                }
-              }
-              ensurePaths(existing, val);
-            } else {
-              // Leaf: ensure parent container exists (handled above). No direct assignment yet.
-              if (existing === undefined) {
-                try {
-                  // Prepare empty container if leaf is an object (already handled) else do nothing.
-                } catch (e) {
-                  /* ignore */
-                }
-              }
-            }
-          }
-        };
-        ensurePaths((data as any).settings, changeSettings);
         assignNested(data.settings, changeSettings);
       }
 
@@ -292,10 +192,10 @@ server.registerTool(
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg))
+          (typeof msg === "string" ? msg : JSON.stringify(msg)),
       );
     }
-  }
+  },
 );
 
 server.registerTool(
@@ -321,10 +221,10 @@ server.registerTool(
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg))
+          (typeof msg === "string" ? msg : JSON.stringify(msg)),
       );
     }
-  }
+  },
 );
 
 server.registerTool(
@@ -333,76 +233,88 @@ server.registerTool(
     title: "Modify Objects",
     description:
       "Create or modify objects in the Wonderland Engine project. " +
-      "Properties not specified in modifications are kept as-is.",
+      "Properties not specified in modifications are kept as-is. " +
+      "If an id is not used, the object will be created.",
     inputSchema: modifyObjectsSchema,
   },
   async ({ modifications }) => {
-    await queue!.push(async () => {
-      modifications.map(
-        ({
-          parentId,
-          position,
-          rotation,
-          scaling,
-          id,
-          name,
-          addComponents,
-          modifyComponents,
-          removeComponents,
-        }) => {
-          id = id ?? randomUUID();
-          const o = data.objects[id];
-
-          if (name) o.name = name;
-          if (parentId) o.parent = parentId;
-          if (position) o.translation = position;
-          if (rotation) o.rotation = rotation;
-          if (scaling) o.scaling = scaling;
-          if (modifyComponents) {
-            modifyComponents.forEach(({ index, properties }) => {
-              const comp = o.components[index];
-              if (comp.type == null) return;
-              //@ts-ignore
-              const props = comp[comp.type];
-              assignComponentProperties(comp.type, props, properties, o, index);
-              for (const key of Object.keys(properties)) {
-                try {
-                  // @ts-ignore
-                  comp[o.components[index].type!][key] = properties[key];
-                } catch (e) {
-                  console.error(
-                    "Could not assign property",
-                    key,
-                    "to",
-                    comp.type,
-                    "component at index",
-                    index,
-                    "of object",
-                    o.name,
-                    "\n",
-                    e
-                  );
-                }
-              }
-            });
-          }
-          if (removeComponents) {
-            removeComponents
-              .sort()
-              .reverse()
-              .forEach((i) => delete o.components[i]);
-          }
-          if (addComponents) {
-            addComponents.forEach((c) => {
-              const index = o.components?.length ?? 0;
-              o.components[index].type = c.type;
+    try {
+      await queue!.push(async () => {
+        modifications.map(
+          ({
+            parentId,
+            position,
+            rotation,
+            scaling,
+            id,
+            name,
+            addComponents,
+            modifyComponents,
+            removeComponents,
+          }) => {
+            const o: ObjectResource =
               // @ts-ignore
-              const comp = o.components[index][c.type];
-              assignComponentProperties(c.type, comp, c.properties, o, index);
-              console.log("Assigned properties", o.components[index]);
-            });
-          }
-        }
+              (id && data.objects[id]) ?? data.objects.add();
+
+            if (name) o.name = name;
+            if (parentId) o.parent = parentId;
+            if (position) o.translation = position;
+            if (rotation) o.rotation = rotation;
+            if (scaling) o.scaling = scaling;
+            if (modifyComponents) {
+              modifyComponents.forEach(({ index, properties }) => {
+                const comp = o.components[index];
+                if (comp.type == null) return;
+                if (!properties) return;
+                // @ts-ignore
+                const props = comp[comp.type];
+                assignComponentProperties(
+                  comp.type,
+                  props,
+                  properties,
+                  o,
+                  index,
+                );
+                for (const key of Object.keys(properties)) {
+                  try {
+                    // @ts-ignore
+                    comp[o.components[index].type!][key] = properties[key];
+                  } catch (e) {
+                    console.error(
+                      "Could not assign property",
+                      key,
+                      "to",
+                      comp.type,
+                      "component at index",
+                      index,
+                      "of object",
+                      o.name,
+                      "\n",
+                      e,
+                    );
+                  }
+                }
+              });
+            }
+            if (removeComponents) {
+              removeComponents
+                .sort()
+                .reverse()
+                .forEach((i) => delete o.components[i]);
+            }
+            if (addComponents) {
+              addComponents.forEach((c) => {
+                if (!c.properties) return;
+                const index = o.components?.length ?? 0;
+                o.components[index].type = c.type;
+                // @ts-ignore
+                const comp = o.components[index][c.type];
+                assignComponentProperties(c.type, comp, c.properties, o, index);
+                console.log("Assigned properties", o.components[index]);
+              });
+            }
+          },
+        );
       });
       return { content: [{ type: "text", text: "Done." }] };
     } catch (error: any) {
@@ -410,10 +322,10 @@ server.registerTool(
       console.error("modify_objects error:", error);
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg))
+          (typeof msg === "string" ? msg : JSON.stringify(msg)),
       );
     }
-  }
+  },
 );
 
 server.registerTool(
@@ -443,7 +355,7 @@ server.registerTool(
             if (changeProperties) {
               assignNested(res, changeProperties);
             }
-          }
+          },
         );
       });
 
@@ -453,10 +365,10 @@ server.registerTool(
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg))
+          (typeof msg === "string" ? msg : JSON.stringify(msg)),
       );
     }
-  }
+  },
 );
 
 server.registerTool(
@@ -482,51 +394,31 @@ server.registerTool(
         } | null;
       }[] = [];
 
-      // Thin wrapper to call utility with editor data and tools callback
-      const computeTreeBounds = (objectId: string) =>
-        computeTreeBoundsUtil(
-          objectId,
-          data.objects as any,
-          (meshId: string, out: Float32Array) =>
-            tools.computeMeshBounds(meshId, out)
-        );
-
       await queue!.push(async () => {
         // For each import, create a new container object (named after the file basename),
         // import the scene under it, then report the immediate children with their tree bounds.
         for (const entry of imports as any[]) {
           const scenePath = (entry as any)?.path;
-          // Create container object at root (ensure a valid record exists)
-          const containerId = randomUUID();
-          let effectiveContainerId: string = containerId as unknown as string;
           const allObjects: Record<string, any> = data.objects as any;
           const baseName = getBasename(scenePath);
-          if (!allObjects[containerId]) {
-            allObjects[containerId] = {
-              name: baseName,
-              parent: null,
-              translation: [0, 0, 0],
-              rotation: [0, 0, 0, 1],
-              scaling: [1, 1, 1],
-              components: {},
-              skin: null,
-            };
-          } else {
-            allObjects[containerId].name = baseName;
-            allObjects[containerId].parent = null;
-          }
+
+          // @ts-ignore
+          const containerObject = data.objects.add();
+          containerObject.name = baseName;
 
           // Snapshot existing object IDs to detect new ones created by this import
           const beforeIds = new Set(Object.keys(allObjects));
           console.log(
             "[import_scenes] container:",
-            containerId,
+            containerObject.resourceKey,
             "before count:",
-            beforeIds.size
+            beforeIds.size,
           );
 
           // Import under the created container
-          await tools.loadScene(scenePath, { parent: containerId });
+          await tools.loadScene(scenePath, {
+            parent: containerObject.resourceKey,
+          });
 
           // Compute set of new object IDs
           const newIds = new Set<string>();
@@ -536,7 +428,7 @@ server.registerTool(
             "[import_scenes] after count:",
             Object.keys(allObjects).length,
             "new ids:",
-            Array.from(newIds)
+            Array.from(newIds),
           );
 
           // Ensure all newly created root objects are parented to the container
@@ -546,7 +438,7 @@ server.registerTool(
             const p = allObjects[id]?.parent;
             const parentInNewSet = p != null && newIds.has(String(p));
             if (p == null || !parentInNewSet) {
-              allObjects[id].parent = containerId;
+              allObjects[id].parent = containerObject.resourceKey;
             }
           }
 
@@ -554,7 +446,10 @@ server.registerTool(
           const importedRootIds: string[] = [];
           for (const id of newIds) {
             const p = allObjects[id]?.parent;
-            if (p != null && String(p) === String(containerId)) {
+            if (
+              p != null &&
+              String(p) === String(containerObject.resourceKey)
+            ) {
               importedRootIds.push(id);
             }
             console.log(
@@ -563,55 +458,19 @@ server.registerTool(
               "parent:",
               p,
               "match:",
-              String(p) === String(containerId)
+              String(p) === String(containerObject.resourceKey),
             );
           }
 
-          console.log("[import_scenes] imported root ids:", importedRootIds);
-
-          // Fallback: some importers may ignore the requested parent. If exactly one
-          // new object was created, assume it's the imported root and use it as container.
-          if (importedRootIds.length === 0) {
-            const newArr = Array.from(newIds);
-            if (newArr.length === 1) {
-              const rid = newArr[0];
-              importedRootIds.push(rid);
-              // Set container to the same id and apply the basename to help users identify it
-              // if it didn't already have a meaningful name.
-              try {
-                effectiveContainerId = rid as unknown as string;
-                allObjects[rid].name = baseName;
-              } catch {}
-              console.log(
-                "[import_scenes] fallback: using",
-                rid,
-                "as container and root"
-              );
-            }
-          }
-
-          // Compute bounds per imported root
           for (const oid of importedRootIds) {
             const { bounds: b, count } = computeTreeBounds(oid, data.objects);
-            if (b) {
-              const minOut: [number, number, number] = [b[0], b[1], b[2]];
-              const maxOut: [number, number, number] = [b[3], b[4], b[5]];
-              results.push({
-                id: oid,
-                rootId: oid,
-                containerId: effectiveContainerId,
-                bounds: { min: minOut, max: maxOut },
-                count,
-              });
-            } else {
-              results.push({
-                id: oid,
-                rootId: oid,
-                containerId: effectiveContainerId,
-                bounds: null,
-                count,
-              });
-            }
+            results.push({
+              id: oid,
+              rootId: oid,
+              containerId: containerObject.resourceKey,
+              bounds: b && { min: [b[0], b[1], b[2]], max: [b[3], b[4], b[5]] },
+              count,
+            });
           }
         }
       });
@@ -627,10 +486,10 @@ server.registerTool(
       console.error("[import_scenes] Error:", error);
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg))
+          (typeof msg === "string" ? msg : JSON.stringify(msg)),
       );
     }
-  }
+  },
 );
 
 server.registerTool(
@@ -652,10 +511,10 @@ server.registerTool(
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg))
+          (typeof msg === "string" ? msg : JSON.stringify(msg)),
       );
     }
-  }
+  },
 );
 
 server.registerTool(
@@ -681,10 +540,10 @@ server.registerTool(
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg))
+          (typeof msg === "string" ? msg : JSON.stringify(msg)),
       );
     }
-  }
+  },
 );
 
 server.registerTool(
@@ -715,8 +574,8 @@ server.registerTool(
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg))
+          (typeof msg === "string" ? msg : JSON.stringify(msg)),
       );
     }
-  }
+  },
 );
