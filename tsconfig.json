@@ -11,6 +11,6 @@
     "forceConsistentCasingInFileNames": true,
     "declaration": true
   },
-  "include": ["*.ts", "*.mts"],
+  "include": ["*.ts", "*.mts", "utils/*.ts"],
   "exclude": ["node_modules", "build"]
 }

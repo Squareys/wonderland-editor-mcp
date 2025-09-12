@@ -1,7 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { data, ObjectResource, tools } from "@wonderlandengine/editor-api";
 import { WorkQueue } from "./utils/work-queue.js";
-import { randomUUID } from "crypto";
 import {
   computeMeshBoundsSchema,
   computeObjectBoundsSchema,
@@ -18,9 +17,13 @@ import {
   assignComponentProperties,
   assignNested,
   filterObjectProperties,
+} from "./utils/pojo.js";
+import {
   computeTreeBounds,
-  getBasename,
-} from "./utils.js";
+  stringifyWithDefaults,
+} from "./utils/editor-api.js";
+import path from "node:path";
+import { stringify } from "node:querystring";
 
 // JS component property caches (per object-component index and per object+type fallback)
 const jsComponentProps = new Map<string, any>();
@@ -33,19 +36,6 @@ export const server = new McpServer({
 let queue: WorkQueue | null = null;
 export function setQueue(q: WorkQueue) {
   queue = q;
-}
-
-// Utility: stable iteration over component container (array or numeric-keyed object)
-function iterateComponentSlots(container: any): any[] {
-  if (!container) return [];
-  if (Array.isArray(container)) return container.slice();
-  if (typeof container === "object") {
-    return Object.keys(container)
-      .filter((k) => !isNaN(Number(k)))
-      .sort((a, b) => Number(a) - Number(b))
-      .map((k) => container[k]);
-  }
-  return [];
 }
 
 server.registerTool(
@@ -112,7 +102,10 @@ server.registerTool(
       return {
         content: resources.map((res) => ({
           type: "text",
-          text: JSON.stringify(res),
+          text:
+            paths && paths.length > 0
+              ? JSON.stringify(res)
+              : stringifyWithDefaults(res),
         })),
       };
     } catch (error: any) {
@@ -120,10 +113,10 @@ server.registerTool(
       console.error("query_resources error:", error);
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg)),
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
       );
     }
-  },
+  }
 );
 
 server.registerTool(
@@ -131,7 +124,7 @@ server.registerTool(
   {
     title: "Query Settings",
     description:
-      "Retrieve the current project settings. Specify paths like 'rendering' to retrieve only rendering settings.",
+      "Retrieve the current project settings. Specify paths like 'rendering', 'physx', 'editor', 'runtime' to retrieve only specific settings.",
     inputSchema: querySettingsSchema,
   },
   async ({ paths }: { paths?: string[] }) => {
@@ -140,7 +133,19 @@ server.registerTool(
         content: [
           {
             type: "text",
-            text: JSON.stringify(filterObjectProperties(paths, data.settings)),
+            text: JSON.stringify({
+              allStringify: data.settings,
+              allStringifyWithDefaults: stringifyWithDefaults(data.settings),
+              descriptors: Object.getOwnPropertyDescriptors(
+                filterObjectProperties(paths, data.settings)
+              ),
+              stringify: filterObjectProperties(paths, data.settings),
+              stringifyWithDefaults: stringifyWithDefaults(
+                filterObjectProperties(paths, data.settings)
+              ),
+            }) /*stringifyWithDefaults(
+              
+            ),*/,
           },
         ],
       };
@@ -148,7 +153,7 @@ server.registerTool(
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
     }
-  },
+  }
 );
 
 server.registerTool(
@@ -183,7 +188,7 @@ server.registerTool(
         content: [
           {
             type: "text",
-            text: JSON.stringify(data.settings),
+            text: "Done.",
           },
         ],
       };
@@ -192,10 +197,10 @@ server.registerTool(
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg)),
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
       );
     }
-  },
+  }
 );
 
 server.registerTool(
@@ -221,10 +226,10 @@ server.registerTool(
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg)),
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
       );
     }
-  },
+  }
 );
 
 server.registerTool(
@@ -252,9 +257,9 @@ server.registerTool(
             modifyComponents,
             removeComponents,
           }) => {
-            const o: ObjectResource =
-              // @ts-ignore
-              (id && data.objects[id]) ?? data.objects.add();
+            const o: ObjectResource = id
+              ? data.objects[id]
+              : data.objects.add();
 
             if (name) o.name = name;
             if (parentId) o.parent = parentId;
@@ -273,7 +278,7 @@ server.registerTool(
                   props,
                   properties,
                   o,
-                  index,
+                  index
                 );
                 for (const key of Object.keys(properties)) {
                   try {
@@ -290,7 +295,7 @@ server.registerTool(
                       "of object",
                       o.name,
                       "\n",
-                      e,
+                      e
                     );
                   }
                 }
@@ -304,16 +309,23 @@ server.registerTool(
             }
             if (addComponents) {
               addComponents.forEach((c) => {
-                if (!c.properties) return;
                 const index = o.components?.length ?? 0;
                 o.components[index].type = c.type;
                 // @ts-ignore
                 const comp = o.components[index][c.type];
-                assignComponentProperties(c.type, comp, c.properties, o, index);
+
+                if (c.properties)
+                  assignComponentProperties(
+                    c.type,
+                    comp,
+                    c.properties,
+                    o,
+                    index
+                  );
                 console.log("Assigned properties", o.components[index]);
               });
             }
-          },
+          }
         );
       });
       return { content: [{ type: "text", text: "Done." }] };
@@ -322,10 +334,10 @@ server.registerTool(
       console.error("modify_objects error:", error);
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg)),
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
       );
     }
-  },
+  }
 );
 
 server.registerTool(
@@ -355,7 +367,7 @@ server.registerTool(
             if (changeProperties) {
               assignNested(res, changeProperties);
             }
-          },
+          }
         );
       });
 
@@ -365,10 +377,10 @@ server.registerTool(
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg)),
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
       );
     }
-  },
+  }
 );
 
 server.registerTool(
@@ -400,7 +412,7 @@ server.registerTool(
         for (const entry of imports as any[]) {
           const scenePath = (entry as any)?.path;
           const allObjects: Record<string, any> = data.objects as any;
-          const baseName = getBasename(scenePath);
+          const baseName = path.basename(scenePath);
 
           // @ts-ignore
           const containerObject = data.objects.add();
@@ -412,7 +424,7 @@ server.registerTool(
             "[import_scenes] container:",
             containerObject.resourceKey,
             "before count:",
-            beforeIds.size,
+            beforeIds.size
           );
 
           // Import under the created container
@@ -428,7 +440,7 @@ server.registerTool(
             "[import_scenes] after count:",
             Object.keys(allObjects).length,
             "new ids:",
-            Array.from(newIds),
+            Array.from(newIds)
           );
 
           // Ensure all newly created root objects are parented to the container
@@ -458,7 +470,7 @@ server.registerTool(
               "parent:",
               p,
               "match:",
-              String(p) === String(containerObject.resourceKey),
+              String(p) === String(containerObject.resourceKey)
             );
           }
 
@@ -486,10 +498,10 @@ server.registerTool(
       console.error("[import_scenes] Error:", error);
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg)),
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
       );
     }
-  },
+  }
 );
 
 server.registerTool(
@@ -511,10 +523,10 @@ server.registerTool(
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg)),
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
       );
     }
-  },
+  }
 );
 
 server.registerTool(
@@ -540,10 +552,10 @@ server.registerTool(
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg)),
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
       );
     }
-  },
+  }
 );
 
 server.registerTool(
@@ -574,8 +586,8 @@ server.registerTool(
       console.error("Validation errors:", error, error?.errors ?? "");
       throw new Error(
         "Invalid arguments: " +
-          (typeof msg === "string" ? msg : JSON.stringify(msg)),
+          (typeof msg === "string" ? msg : JSON.stringify(msg))
       );
     }
-  },
+  }
 );
