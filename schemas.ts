@@ -70,7 +70,10 @@ export const modifyObjectsSchema = {
   modifications: z
     .object({
       name: z.string().describe("Name for the object").optional(),
-      id: z.string().describe("ID of the object. Creates a new object, if not set.").optional(),
+      id: z
+        .string()
+        .describe("ID of the object. Creates a new object, if not set.")
+        .optional(),
       parentId: z
         .string()
         .nullable()
@@ -125,7 +128,12 @@ export const modifyResourcesSchema = {
   modifications: z
     .object({
       resourceType: z.enum(ResourceTypes).describe("Type of resource."),
-      id: z.string().describe("ID of the resource to modify."),
+      id: z
+        .string()
+        .describe(
+          "ID of the resource to modify. If omitted, a new resource will be created (where supported)."
+        )
+        .optional(),
       changeProperties: SafeRecord.optional().describe("Properties to change."),
       resetProperties: z
         .string()

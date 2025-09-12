@@ -52,10 +52,12 @@ server.registerTool(
       const allResources: Record<string, any> = data[resourceType];
       let resources: Record<string, any>[] =
         ids && ids.length > 0
-          ? ids.map((id) => ({
-              id,
-              ...allResources[id],
-            }))
+          ? ids
+              .filter((id) => allResources.exists(id))
+              .map((id) => ({
+                id,
+                ...allResources[id],
+              }))
           : Object.entries(allResources).map(([id, res]) => ({
               id,
               ...res,
@@ -153,22 +155,24 @@ server.registerTool(
   async ({ changeSettings, resetPaths }) => {
     try {
       let errors = [];
-      resetPaths?.forEach((key) => {
-        const split = key.split(".");
-        try {
-          let setting: any = data.settings;
-          for (const k of split.slice(0, -1)) {
-            setting = setting[k];
-            if (setting === undefined || setting === null) return; // nothing to delete
+      await queue!.push(async () => {
+        resetPaths?.forEach((key) => {
+          const split = key.split(".");
+          try {
+            let setting: any = data.settings;
+            for (const k of split.slice(0, -1)) {
+              setting = setting[k];
+              if (setting === undefined || setting === null) return; // nothing to delete
+            }
+          } catch {
+            errors.push(`Could not reset setting at path ${key} - not found.`);
           }
-        } catch {
-          errors.push(`Could not reset setting at path ${key} - not found.`);
+        });
+
+        if (changeSettings) {
+          assignNested(data.settings, changeSettings);
         }
       });
-
-      if (changeSettings) {
-        assignNested(data.settings, changeSettings);
-      }
 
       return {
         content: [
@@ -341,7 +345,7 @@ server.registerTool(
         modifications.map(
           ({ id, resourceType, changeProperties, resetProperties }) => {
             // @ts-ignore
-            const res = data[resourceType][id];
+            const res = id ? data[resourceType][id] : data[resourceType].add();
 
             if (resetProperties) {
               resetProperties.forEach((key) => {
