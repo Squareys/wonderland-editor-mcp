@@ -102,10 +102,7 @@ server.registerTool(
       return {
         content: resources.map((res) => ({
           type: "text",
-          text:
-            paths && paths.length > 0
-              ? JSON.stringify(res)
-              : stringifyWithDefaults(res),
+          text: JSON.stringify(res),
         })),
       };
     } catch (error: any) {
@@ -129,13 +126,13 @@ server.registerTool(
   },
   async ({ paths }: { paths?: string[] }) => {
     try {
+      const settings = JSON.parse(stringifyWithDefaults(data.settings));
+
       return {
         content: [
           {
             type: "text",
-            text: stringifyWithDefaults(
-              filterObjectProperties(paths, data.settings)
-            ),
+            text: JSON.stringify(filterObjectProperties(paths, settings)),
           },
         ],
       };
@@ -164,11 +161,6 @@ server.registerTool(
             setting = setting[k];
             if (setting === undefined || setting === null) return; // nothing to delete
           }
-          console.log(
-            "Delete success:",
-            Reflect.deleteProperty(setting, split[split.length - 1])
-          );
-          console.log("Value is now:", setting[split[split.length - 1]]);
         } catch {
           errors.push(`Could not reset setting at path ${key} - not found.`);
         }
@@ -316,7 +308,6 @@ server.registerTool(
                     o,
                     index
                   );
-                console.log("Assigned properties", o.components[index]);
               });
             }
           }
@@ -387,8 +378,6 @@ server.registerTool(
   },
   async ({ imports }) => {
     try {
-      // Debug: Log raw inputs to help diagnose schema/shape issues during tests
-      console.log("import_scenes received imports:", JSON.stringify(imports));
       const results: {
         id: string;
         rootId: string;
@@ -414,12 +403,6 @@ server.registerTool(
 
           // Snapshot existing object IDs to detect new ones created by this import
           const beforeIds = new Set(Object.keys(allObjects));
-          console.log(
-            "[import_scenes] container:",
-            containerObject.resourceKey,
-            "before count:",
-            beforeIds.size
-          );
 
           // Import under the created container
           await tools.loadScene(scenePath, {
@@ -430,12 +413,6 @@ server.registerTool(
           const newIds = new Set<string>();
           for (const id of Object.keys(allObjects))
             if (!beforeIds.has(id)) newIds.add(id);
-          console.log(
-            "[import_scenes] after count:",
-            Object.keys(allObjects).length,
-            "new ids:",
-            Array.from(newIds)
-          );
 
           // Ensure all newly created root objects are parented to the container
           // Some importers may ignore the parent option. If a new object has no parent
@@ -458,14 +435,6 @@ server.registerTool(
             ) {
               importedRootIds.push(id);
             }
-            console.log(
-              "[import_scenes] candidate id:",
-              id,
-              "parent:",
-              p,
-              "match:",
-              String(p) === String(containerObject.resourceKey)
-            );
           }
 
           for (const oid of importedRootIds) {
