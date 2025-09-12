@@ -133,19 +133,9 @@ server.registerTool(
         content: [
           {
             type: "text",
-            text: JSON.stringify({
-              allStringify: data.settings,
-              allStringifyWithDefaults: stringifyWithDefaults(data.settings),
-              descriptors: Object.getOwnPropertyDescriptors(
-                filterObjectProperties(paths, data.settings)
-              ),
-              stringify: filterObjectProperties(paths, data.settings),
-              stringifyWithDefaults: stringifyWithDefaults(
-                filterObjectProperties(paths, data.settings)
-              ),
-            }) /*stringifyWithDefaults(
-              
-            ),*/,
+            text: stringifyWithDefaults(
+              filterObjectProperties(paths, data.settings)
+            ),
           },
         ],
       };
@@ -174,7 +164,11 @@ server.registerTool(
             setting = setting[k];
             if (setting === undefined || setting === null) return; // nothing to delete
           }
-          delete setting[split[split.length - 1]];
+          console.log(
+            "Delete success:",
+            Reflect.deleteProperty(setting, split[split.length - 1])
+          );
+          console.log("Value is now:", setting[split[split.length - 1]]);
         } catch {
           errors.push(`Could not reset setting at path ${key} - not found.`);
         }

@@ -94,21 +94,35 @@ export function computeTreeBounds(
 }
 
 /** Stringify while including defaults on Access objects. */
-export function stringifyWithDefaults(input: any, space?: number | string) {
-  const full: any = {};
-  for (const k in input) {
-    full[k] = (input as any)[k];
-  }
+export function stringifyWithDefaults(
+  input: any,
+  space?: number | string
+): string {
+  const seen = new WeakSet();
 
-  return JSON.stringify(
-    full,
-    (_k, v) => {
-      if (!v || typeof v !== "object") return v;
+  const materialize = (v: any): any => {
+    if (v === null || typeof v !== "object") return v;
+    if (seen.has(v)) return "[Circular]";
+    seen.add(v);
 
-      const out: any = {};
-      for (const k in v) out[k] = (v as any)[k];
+    if (Array.isArray(v)) {
+      // Build dense array via inherited/enum indices
+      let max = -1;
+      for (const k in v) {
+        const i = +k;
+        if (Number.isInteger(i) && i > max) max = i;
+      }
+      const len = Math.max(v.length, max + 1);
+      const out = new Array(len);
+      for (let i = 0; i < len; i++) out[i] = materialize(v[i]);
       return out;
-    },
-    space
-  );
+    }
+
+    // Copy own + inherited enumerable keys (triggers interceptors/getters)
+    const out: any = {};
+    for (const k in v) out[k] = materialize((v as any)[k]);
+    return out;
+  };
+
+  return JSON.stringify(materialize(input), null, space);
 }
