@@ -164,6 +164,8 @@ server.registerTool(
               setting = setting[k];
               if (setting === undefined || setting === null) return; // nothing to delete
             }
+
+            delete setting[split[split.length - 1]];
           } catch {
             errors.push(`Could not reset setting at path ${key} - not found.`);
           }
