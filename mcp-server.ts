@@ -253,6 +253,8 @@ server.registerTool(
               ? data.objects[id]
               : data.objects.add();
 
+            if (!o) throw new Error(`Object with id ${id} not found.`);
+
             if (name) o.name = name;
             if (parentId) o.parent = parentId;
             if (position) o.translation = position;

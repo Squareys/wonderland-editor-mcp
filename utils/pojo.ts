@@ -16,23 +16,6 @@ export function assignNested(
     }
   }
 }
-/*
-export function assignNested(target: any, source: any): void {
-  for (const key in source) if (Object.prototype.hasOwnProperty.call(source, key)) {
-    const src = source[key];
-    const dst = target[key]; // triggers interceptor getter
-
-    if (src && typeof src === 'object' && dst && typeof dst === 'object' && !Array.isArray(src) && !Array.isArray(dst)) {
-      assignNested(dst, src);
-    } else {
-      // Only set if the key is known on target (respects defaults via `in`)
-      if (!(key in target)) throw new Error(`Unknown path: ${String(key)}`);
-      const ok = Reflect.set(target, key, src);   // observe success without creating real props
-      if (!ok) throw new TypeError(`Cannot set ${String(key)}`);
-    }
-  }
-}
-*/
 
 /**
  * Assigns properties to a component, ensuring type and length consistency.
@@ -51,13 +34,16 @@ export function assignComponentProperties(
 ) {
   for (const key of Object.keys(comp)) {
     if (key in properties) {
-      if (typeof comp[key] !== typeof properties[key]) {
+      const inType = typeof properties[key];
+      /* Resource references may be null, but expect string. We special case this. */
+      if (
+        typeof comp[key] !== inType ||
+        (comp[key] === null && inType !== "string")
+      ) {
         throw new Error(
-          `Type mismatch for property ${key} in component ${
-            comp.type
-          } of object ${o.name}. Expected ${typeof comp[
-            key
-          ]}, got ${typeof properties[key]}`
+          `Type mismatch for property '${key}' in '${typeName}' component at index ${index} of object ${
+            o.name
+          }. Expected ${typeof comp[key]}, got ${inType}`
         );
       }
       if (
