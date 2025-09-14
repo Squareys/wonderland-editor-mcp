@@ -37,8 +37,8 @@ export function assignComponentProperties(
       const inType = typeof properties[key];
       /* Resource references may be null, but expect string. We special case this. */
       if (
-        typeof comp[key] !== inType ||
-        (comp[key] === null && inType !== "string")
+        typeof comp[key] !== inType &&
+        !(comp[key] == null && inType === "string")
       ) {
         throw new Error(
           `Type mismatch for property '${key}' in '${typeName}' component at index ${index} of object ${
