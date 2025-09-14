@@ -101,12 +101,12 @@ server.registerTool(
         resources = resources.map(filterObjectProperties.bind(null, paths));
       }
 
-      return {
-        content: resources.map((res) => ({
-          type: "text",
-          text: JSON.stringify(res),
-        })),
-      };
+      const content = resources.map((res) => ({
+        type: "text" as const,
+        text: JSON.stringify(res),
+      }));
+
+      return { content };
     } catch (error: any) {
       const msg = (error && (error.errors || error.message)) ?? "Unknown error";
       console.error("query_resources error:", error);
