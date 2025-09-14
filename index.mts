@@ -48,9 +48,10 @@ export default class Index extends EditorPlugin {
 
   update() {
     /* Consume all functions in the queue */
-    if(!this.queue.empty) {
-        while (this.queue.pop()) ++this.commandsCount;
-        tools.packageProject();
+    if (!this.queue.empty) {
+      while (this.queue.pop()) ++this.commandsCount;
+      /* Defer packaging to after the change handlers consumed the changes */
+      setTimeout(() => tools.packageProject(), 0);
     }
   }
 }
