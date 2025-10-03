@@ -1,6 +1,6 @@
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import express, { Request, Response } from "express";
+import express, { NextFunction, Request, Response } from "express";
 import { server, setQueue } from "./mcp-server.js";
 import { WorkQueue } from "./utils/work-queue.js";
 import { randomUUID } from "crypto";
@@ -8,9 +8,10 @@ import { randomUUID } from "crypto";
 const app = express();
 app.use(express.json());
 
-app.use((req, _, next) =>{
-    console.log(req.method, req.path, req.body);
-    next();
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  console.log(req.method, req.path);
+  console.dir(req.body, { depth: null });
+  next();
 });
 
 const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
