@@ -54,6 +54,10 @@ export function assignComponentProperties(
           `Length mismatch for property '${key}' in '${typeName}' component with index ${index} of object "${o.name}". Expected length ${comp[key].length}, got ${properties[key].length}`
         );
       }
+      if (isObject(properties[key])) {
+        assignNested(comp[key], properties[key]);
+        continue;
+      }
       comp[key] = properties[key];
     }
   }
