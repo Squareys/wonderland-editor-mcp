@@ -12,27 +12,18 @@ To use this plugin, you need a nightly version or version 1.4.0+ of Wonderland E
 
 ### Project
 
-First, install the plugin into your project:
-
-```ssh
-// Clone this repository into the plugins folder of your project, or install via npm
-npm i --save-dev path/to/repo
-
-cd path/to/repo
-npm i
-npm run build
-```
+First, install the plugin into your project via the "Views > Plugins > Project" view.
 
 ### AI Agent Client
 
 Once the project is loaded and plugin execution is enabled, the MCP server runs via SSE transport on
-`http://localhost:3000/sse`.
+`http://localhost:3020/mcp`.
 
 If you can't use SSE, because your client doesn't support it, you can wrap it like this:
 
 ```sh
 # Wrap the mcp server via STDIO
-npx -y supergateway --sse "http://localhost:3000/sse"
+npx -y supergateway --sse "http://localhost:3020/mcp"
 ```
 
 #### Continue
@@ -47,8 +38,8 @@ On **Windows**:
     - npx
     - -y
     - supergateway
-    - --sse
-    - http://localhost:3000/sse
+    - --streamableHttp
+    - http://localhost:3020/sse
 ```
 
 Other systems:
@@ -59,13 +50,6 @@ Other systems:
   args:
     - -y
     - supergateway
-    - --sse
-    - http://localhost:3000/sse
+    - --streamableHttp
+    - http://localhost:3020/mcp
 ```
-
-## Features
-
-- Primarily SSE transport, but comes with an npm command `@wonderlandengine/mcp-server` to wrap into
-  STDIO with Supergateway.
-- Modify and manage Wonderland Engine objects and resources dynamically.
-- Import files into the editor.
