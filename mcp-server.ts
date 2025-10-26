@@ -10,6 +10,7 @@ import {
   modifyObjectsSchema,
   modifyResourcesSchema,
   modifySettingsSchema,
+  queryComponentTypesSchema,
   queryResourcesSchema,
   querySettingsSchema,
 } from "./schemas.js";
@@ -191,6 +192,39 @@ server.registerTool(
         "Invalid arguments: " +
           (typeof msg === "string" ? msg : JSON.stringify(msg))
       );
+    }
+  }
+);
+
+server.registerTool(
+  "query_component_types",
+  {
+    title: "Query Component Types",
+    description:
+      "Retrieve the current registered component types and their property definitions.",
+    inputSchema: queryComponentTypesSchema,
+  },
+  async ({ names }: { names?: string[] }) => {
+    try {
+      const settings = JSON.parse(stringifyWithDefaults(data.settings));
+
+      const componentTypes = tools.getComponentTypes() as {name: string, properties: any}[];
+      let filteredComponentTypes = componentTypes;
+      if (names && names.length > 0) {
+        filteredComponentTypes = componentTypes.filter(ct => names.includes(ct.name));
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(filteredComponentTypes),
+          },
+        ],
+      };
+    } catch (error: any) {
+      console.error("Validation errors:", error, error?.errors ?? "");
+      throw new Error("Invalid arguments: " + JSON.stringify(error.errors));
     }
   }
 );

@@ -62,6 +62,14 @@ export const modifySettingsSchema = {
     ),
 };
 
+export const queryComponentTypesSchema = {
+  names: z
+    .string()
+    .array()
+    .optional()
+    .describe("List of component names to filter by.")
+};
+
 export const deleteObjectsSchema = {
   objectIds: z.string().array(),
 };
