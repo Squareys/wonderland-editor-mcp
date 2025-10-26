@@ -1,5 +1,5 @@
 {
-  "name": "mcp-plugin",
+  "name": "@wonderlandengine/mcp-plugin",
   "version": "1.0.3",
   "main": "./build/index.mjs",
   "type": "module",
@@ -14,7 +14,7 @@
     "build"
   ],
   "author": "Wonderland Engine (Create Worlds)",
-  "license": "ISC",
+  "license": "MIT",
   "description": "",
   "wonderlandengine": {},
   "dependencies": {
