@@ -7,20 +7,24 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
-    "inspect": "npx -y @modelcontextprotocol/inspector"
+    "inspect": "npx -y @modelcontextprotocol/inspector",
+    "prepack": "npm run build"
   },
+  "files": [
+    "build"
+  ],
   "author": "Wonderland Engine (Create Worlds)",
   "license": "ISC",
   "description": "",
   "wonderlandengine": {},
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.2",
-    "@types/express": "^5.0.1",
-    "@wonderlandengine/editor-api": "^1.5.0-rc.1",
+    "@wonderlandengine/editor-api": "1.5.0-rc.3",
     "express": "^5.1.0"
   },
   "devDependencies": {
     "@types/node": "^18",
+    "@types/express": "^5.0.1",
     "typescript": "^5.3.3"
   }
 }

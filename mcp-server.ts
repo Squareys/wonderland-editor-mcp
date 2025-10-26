@@ -196,7 +196,7 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+if ('getComponentTypes' in tools) server.registerTool(
   "query_component_types",
   {
     title: "Query Component Types",
@@ -208,7 +208,7 @@ server.registerTool(
     try {
       const settings = JSON.parse(stringifyWithDefaults(data.settings));
 
-      const componentTypes = tools.getComponentTypes() as {name: string, properties: any}[];
+      const componentTypes = (tools as any).getComponentTypes() as {name: string, properties: any}[];
       let filteredComponentTypes = componentTypes;
       if (names && names.length > 0) {
         filteredComponentTypes = componentTypes.filter(ct => names.includes(ct.name));
