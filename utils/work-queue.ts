@@ -1,15 +1,15 @@
 export class WorkQueue {
   private _queue: {
-    func: () => Promise<void>;
-    res: () => void;
+    func: () => Promise<any>;
+    res: (value: any) => void;
     rej: (e: any) => void;
   }[] = [];
 
   /**
    * Push a new work item into the queue
    */
-  async push(func: () => Promise<void>): Promise<void> {
-    return new Promise<void>((res, rej) => {
+  async push<T = void>(func: () => Promise<T>): Promise<T> {
+    return new Promise<T>((res, rej) => {
       this._queue.push({ func, res, rej });
     });
   }

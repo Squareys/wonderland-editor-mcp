@@ -3,7 +3,7 @@ import { EditorPlugin, ui, tools } from "@wonderlandengine/editor-api";
 import { main, shutdown } from "./server.js";
 import { WorkQueue } from "./utils/work-queue.js";
 
-const PORT = 3020;
+const PORT = Number(process?.env?.WLE_MCP_PORT ?? 3020);
 const CONFIG_EXAMPLE = `    "wonderland-editor-mcp": {
       "url": "http://localhost:${PORT}/mcp"
     }
@@ -20,7 +20,12 @@ export default class Index extends EditorPlugin {
     this.name = "MCP Server";
     this.queue = new WorkQueue();
 
-    main({ port: PORT, queue: this.queue }).catch((error) => {
+    main({ port: PORT, queue: this.queue }).then(
+      () => {
+        console.log("[mcp] server running on port", PORT);
+      }
+    ).catch((error) => {
+      console.error("[mcp][error]", error.toString());
       this.status = "[error]" + error.toString();
     });
   }

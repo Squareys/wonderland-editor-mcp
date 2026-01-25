@@ -19,7 +19,7 @@
   "wonderlandengine": {},
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.2",
-    "@wonderlandengine/editor-api": "1.5.0-rc.3",
+    "@wonderlandengine/editor-api": "1.5.2",
     "express": "^5.1.0"
   },
   "devDependencies": {

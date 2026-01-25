@@ -32,7 +32,7 @@ const jsComponentPropsByObjectType = new Map<string, any>();
 
 export const server = new McpServer({
   name: "Wonderland Editor",
-  version: "0.3.0",
+  version: "1.1.0",
 });
 let queue: WorkQueue | null = null;
 export function setQueue(q: WorkQueue) {
@@ -238,14 +238,16 @@ server.registerTool(
   },
   async ({ objectIds }) => {
     try {
-      await queue!.push(async () => {
-        objectIds.map((objectId) => {
+      const missingObjects = await queue!.push(async () => {
+        return objectIds.filter((objectId) => {
+          if(!data.objects[objectId].exists) return true;
           delete data.objects[objectId];
+          return false;
         });
       });
 
       return {
-        content: [{ type: "text", text: "Done." }],
+        content: [{ type: "text", text: missingObjects.length != 0 ? "The following objects were not found: " + missingObjects.join(", ") : "Done." }],
       };
     } catch (error: any) {
       const msg = (error && (error.errors || error.message)) ?? "Unknown error";
