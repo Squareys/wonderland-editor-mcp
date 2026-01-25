@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/squareys-wonderland-editor-mcp-badge.png)](https://mseep.ai/app/squareys-wonderland-editor-mcp)
+
 # Wonderland Editor MCP Plugin
 
 ## Overview
