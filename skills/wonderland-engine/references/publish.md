@@ -53,7 +53,7 @@ the page state. You need no Node.js, no CLI and no token.
    | --- | --- | --- |
    | `idle` | No publish ran in this editor session | Start one with `publish_page` |
    | `packaging` | The editor packages the project | Wait |
-   | `waiting_for_confirmation` | The user has to confirm in the browser (`confirmUrl`) | Remind the user. The tool gives up after 5 minutes |
+   | `waiting_for_confirmation` | The user has to confirm in the browser (`confirmUrl`) | Remind the user. The tool gives up after 15 minutes |
    | `uploading` | The upload runs | Wait |
    | `done` | Finished (`url` holds the page address) | Report the URL |
    | `failed` | Something broke (`error` holds the reason) | Read the error, see [pitfalls.md](pitfalls.md), tell the user |
@@ -76,18 +76,22 @@ How the tool keeps state:
   example the editor closed during the upload), the tool finds the existing page
   and updates it instead of creating another.
 - Updates keep the page's current access unless you pass `access`.
-- The tool works around the certificate problem described in
-  [pitfalls.md](pitfalls.md#publishing). You do not need to do anything for it.
 
 ## Route 2 (fallback): shell and CLI
 
 Use this route only when the MCP tools are not available (for example an older
 plugin version).
 
-**Requirement: system Node.js 20 or newer (22 or newer to be safe).** Check with
-`node --version`. On Node 18 the CLI fails: `@wonderlandcloud/cli` 0.2.36 cannot
-load (`ERR_REQUIRE_ESM`). Do not use the Node.js that is built into the editor.
-If the system has no Node 20+, tell the user and stop; do not try workarounds.
+**Requirement: Node.js 18 or newer and `@wonderlandcloud/cli` 0.2.37 or newer**
+(0.2.36 fails on Node.js 18 with `ERR_REQUIRE_ESM`). The commands below use
+`@latest`, so `npx` does not reuse an older cached version. Without a system
+Node.js, use the one bundled with the Flatpak editor:
+
+```sh
+flatpak run --env=NPM_CLI_JS=/app/share/wonderlandengine/npm/index.js \
+  --env=WLE_CREDENTIALS="$TOKEN" --command=sh com.wonderlandengine.editor \
+  -c 'cd <project dir> && npm exec -y --package=@wonderlandcloud/cli@latest -- wl-cloud page update'
+```
 
 Tell the user the step and how many are left, as during setup.
 
@@ -95,11 +99,15 @@ Tell the user the step and how many are left, as during setup.
 
 The editor packages into `deploy/` after every change. Make sure the last packaging
 succeeded ("Packaging successful!" in the editor log) and that `deploy/index.html`
-exists. Without a running editor:
+exists. Without a running editor, for projects without GI probe volume and sky
+environment:
 
 ```sh
 WonderlandEditor --windowless --project "$PWD/<Name>.wlp" --package
 ```
+
+Projects with either need an editor with a window to package
+([visual-quality.md](visual-quality.md)).
 
 Check the result visually first ([visual-check.md](visual-check.md)), and re-bake GI
 in the editor window if static geometry changed since the last bake.
@@ -120,8 +128,8 @@ handle a long-lived token.
 
 2. Open `https://wonderlandengine.com/account/?actionId=$ACTION_ID` in the user's
    browser and ask them to sign in and confirm.
-3. Poll every 5 seconds, for at most about a minute, until the result contains a
-   token:
+3. Poll every 5 seconds until the result contains a token. Give the user up to
+   15 minutes:
 
    ```sh
    curl -s "https://api.wonderlandengine.com/auth/action/$ACTION_ID/result"
@@ -129,8 +137,8 @@ handle a long-lived token.
    ```
 
 4. Pass the token to the next command only through the environment, e.g.
-   `WLE_CREDENTIALS=<token> npx -y @wonderlandcloud/cli page create ...`. Do not
-   write it to a file or print it.
+   `WLE_CREDENTIALS=<token> npx -y @wonderlandcloud/cli@latest page create ...`.
+   Do not write it to a file or print it.
 5. The token stays valid for several commands in a row, so one confirmation
    covers a whole first publish: `page create`, then set `project.coverImage` to
    the absolute URL of the new domain (from `deployment.json`), let the editor
@@ -152,7 +160,7 @@ grep -qx 'wle-apitoken.json' .gitignore 2>/dev/null || echo 'wle-apitoken.json' 
 ### 3. Create the page (first time)
 
 ```sh
-npx -y @wonderlandcloud/cli page create <page-name> ./deploy --access <unlisted|public, as the user chose>
+npx -y @wonderlandcloud/cli@latest page create <page-name> ./deploy --access <unlisted|public, as the user chose>
 ```
 
 - `--access` is the user's answer; ask before every new page.
@@ -172,15 +180,15 @@ load right away.
 ### 4. Update the page (later deployments)
 
 ```sh
-npx -y @wonderlandcloud/cli page update
+npx -y @wonderlandcloud/cli@latest page update
 ```
 
 It uses `deployment.json`. To keep several deployments (e.g. a public production
 page and an unlisted preview), give each its own config file:
 
 ```sh
-npx -y @wonderlandcloud/cli page create my-project-preview ./deploy --access unlisted --config ./deployments/preview.json
-npx -y @wonderlandcloud/cli page update --config ./deployments/preview.json
+npx -y @wonderlandcloud/cli@latest page create my-project-preview ./deploy --access unlisted --config ./deployments/preview.json
+npx -y @wonderlandcloud/cli@latest page update --config ./deployments/preview.json
 ```
 
 Access is set when the page is created and kept on updates. To change it later,
@@ -196,24 +204,22 @@ their browser.
 
 | Command | Purpose |
 | --- | --- |
-| `npx -y @wonderlandcloud/cli page list` | List the user's pages |
-| `npx -y @wonderlandcloud/cli page get <page-name>` | Show a page's state |
-| `npx -y @wonderlandcloud/cli page delete <page-name>` | Delete a page (ask the user first; it cannot be undone) |
+| `npx -y @wonderlandcloud/cli@latest page list` | List the user's pages |
+| `npx -y @wonderlandcloud/cli@latest page get <page-name>` | Show a page's state |
+| `npx -y @wonderlandcloud/cli@latest page delete <page-name>` | Delete a page (ask the user first; it cannot be undone) |
 
 ## From the editor window
 
 The editor ships a publish plugin (`publish-plugin.mjs` in "Views > Plugins"). The
 user selects it, clicks publish, signs in in the browser window that opens, and
 confirms. Progress shows in the editor console. Prefer the MCP tools when you work
-autonomously; they need no clicks in the editor. The built-in plugin fails on
-Node 18 with a certificate error (see [pitfalls.md](pitfalls.md#publishing)).
+autonomously; they need no clicks in the editor.
 
 ## Speed
 
-Compressing and uploading through the CLI takes seconds (about 0.4 s to compress a
-10 MB deploy folder, under 10 s in total). The same upload run from inside the
-editor (the MCP `publish_page` tool) can take much longer, because the editor's
-embedded Node.js only processes the work between frames, especially when the editor
-window is not in focus. The browser confirmation is usually the longest step; tell
-the user when to confirm.
+Compressing and uploading takes seconds: about 0.2-0.4 s to compress a 10-15 MB
+deploy folder, under 10 s in total. `publish_page` (plugin 1.2.1 and newer) uploads
+in a separate Node.js process for this reason; inside the editor's embedded Node.js
+the same upload takes much longer. The browser confirmation is usually the longest
+step; tell the user when to confirm.
 

@@ -1,155 +1,78 @@
-# Pitfalls and fixes
+# Pitfalls: symptom → fix
 
-## Project file
-
-- **Do not edit the `.wlp` file while the editor runs.** The editor keeps the
-  project in memory and overwrites the file on save. Use the MCP tools.
-- **The one exception: enabling the plugin in a project without an editor window.**
-  Plugin execution needs an entry in the project file. With the editor **stopped**,
-  add it to the top-level `plugins` object:
-
-  ```json
-  "plugins": { "@wonderlandengine/mcp-plugin": { "enable": true } }
-  ```
-
-  In the editor window, "Views > Plugins" does the same.
-- **Save.** Changes are kept in memory and in `.autosave/` only. Call
-  `save_project` after each finished step, and always before stopping the editor.
-
-## New projects
-
-A project made with `--create` has no camera, and VR enabled without eye objects.
-The first packaging fails with "Left and right eye objects need to be set" and then
-"View object could not be detected". Fix:
-
-1. `modify_settings {"changeSettings": {"xr": {"vr": {"enable": false}}}}` (unless
-   the user wants VR).
-2. Add a camera: an object with a `view` component, e.g. at `[0, 1.6, 4]`.
-3. Add a light (a `sun` light) so the scene is not black.
-
-`--create` also keeps running instead of exiting; stop the editor once the `.wlp`
-exists. It does not write `package.json`; create one with `npm init -y` before
-installing the plugin.
-
-## Renaming the project
-
-- **The cache folder is named after the project** (`cache/<project-name>/`, e.g.
-  `cache/project/` for the default name). The folder name is the kebab-cased
-  project name: `MyGame` gives `cache/my-game/`. Changing `settings.project.name`
-  moves it to a new, empty folder: the GI bake (`scenario.data.bin`,
-  `irradiance.bin`) is no longer found, packaging fails with "Found probe volume
-  scenario with no filename. Ensure it is compiled", and a publish during that
-  can upload an empty `index.html`. Set the project name before baking, or
-  copy the files from the old cache folder into the new one and restart the
-  editor.
+Look up the symptom, apply the fix. Where a topic is explained in full elsewhere,
+the entry links there.
 
 ## Editor process
 
-- **Never close or restart an editor the user may be working in** (a bake can be
-  running, which ends silently with the editor). Ask first and wait for the
-  answer.
-- **Windowless editors cannot package projects with a baked GI probe volume**
-  (the scenario is not compiled: "Found probe volume scenario with no
-  filename"). Package and publish such projects from an editor with a window.
-- **Only one editor per port.** A second editor cannot bind port 3020 (MCP) or 8080
-  (preview). The log then shows `[mcp][error] ... EADDRINUSE`. Stop the old one.
-- **Stopping the Flatpak editor:** `flatpak kill com.wonderlandengine.editor` stops
-  ALL editor instances. Use it only when no other editor runs. Otherwise stop one
-  editor by its process id: find it with `ss -ltnp | grep :<mcp port>` (Linux) and
-  run `kill <pid>`. The process is named `Main`, so `pkill WonderlandEditor` misses it.
-- **An editor started with `--create` opens no ports**, so finding it by port
-  does not work. Its process is named `WonderlandEditor` (later instances show as
-  `Main`). Find it with `pgrep -f <project path>` and run `kill <pid>`.
-- **Linux, `--windowless` crashes with exit code 139** right after "Running in
-  windowless mode": no X11 display. Set `DISPLAY`, or run under `xvfb-run -a`.
-- **Linux with NVIDIA, the editor crashes at startup** (after
-  "Initializing Plugin: PluginsView"): disable NVIDIA's threaded optimizations,
-  `__GL_THREADED_OPTIMIZATIONS=0`. For Flatpak, permanently:
-  `flatpak override --user --env=__GL_THREADED_OPTIMIZATIONS=0 com.wonderlandengine.editor`.
-- **Flatpak `npm` fails** with "Cannot find module .../node_modules/npm/index.js":
-  add `--env=NPM_CLI_JS=/app/share/wonderlandengine/npm/index.js` to
-  `flatpak run --command=npm ...`.
+| Symptom | Fix |
+| --- | --- |
+| Linux: exit code 139 right after "Running in windowless mode" | No X11 display. Set `DISPLAY`, or run under `xvfb-run -a` ([setup.md](setup.md), step 7). |
+| Linux with NVIDIA: exit 139 after "Initializing Plugin: PluginsView" | `__GL_THREADED_OPTIMIZATIONS=0` ([setup.md](setup.md), step 7). |
+| `[mcp][error] ... EADDRINUSE` | Another editor holds the port. Stop that one by its PID, or give the new editor other ports ([setup.md](setup.md), "Running beside another editor"). |
+| Flatpak `npm`: "Cannot find module .../node_modules/npm/index.js" | Add `--env=NPM_CLI_JS=/app/share/wonderlandengine/npm/index.js` ([setup.md](setup.md), step 6). |
+| Cannot find the editor process to stop it | The process is named `Main` (the first one `WonderlandEditor`), so `pkill WonderlandEditor` misses it. Find it by port (`ss -ltnp \| grep :<mcp port>`) or, for `--create` (opens no ports), with `pgrep -f <project path>`; then `kill <pid>`. `flatpak kill com.wonderlandengine.editor` stops **all** editors. |
+| Crash "munmap_chunk(): invalid pointer" or "Cork buffer must not be acquired ..." at "Reloading clients" | A browser was still loading the preview during repackaging ([visual-check.md](visual-check.md), "No browser connected while you edit"). |
+| New JavaScript components are not registered | The editor watches `js/` only if it existed at start. Restart the editor once. |
+
+**Never close or restart an editor the user may be working in** (a GI bake may be
+running, and it ends silently with the editor). Ask first and wait for the answer.
+
+## Project file and new projects
+
+| Symptom | Fix |
+| --- | --- |
+| Your `.wlp` edit is gone or the project no longer loads | Never edit the `.wlp` while the editor runs; it overwrites the file on save. Use the MCP tools. Only exception: enabling the plugin with the editor stopped ([setup.md](setup.md), step 6). |
+| Changes lost after the editor stopped | They were only in memory and `.autosave/`. Call `save_project` after every step. |
+| New project: "Left and right eye objects need to be set", then "View object could not be detected" | Disable VR (or set the eye objects), add a camera and a sun ([setup.md](setup.md), step 8). |
+| `--create` keeps running | Expected. Stop it once the `.wlp` exists. It writes no `package.json`; run `npm init -y`. |
+| After renaming the project: "Found probe volume scenario with no filename. Ensure it is compiled", GI gone | The cache folder follows the project name. Copy the bake into the new folder ([visual-quality.md](visual-quality.md), "Keep the bake"). |
 
 ## MCP connection
 
-- **Only one MCP client at a time.** A second client's `initialize` replaces the
-  first client's session. Symptoms: "Must call initialize first", "Not
-  initialized". Reconnect, and do not run probes while another agent is connected.
-- **Tools missing after setup:** most clients only load MCP servers at start.
-  Restart or reload the client.
+| Symptom | Fix |
+| --- | --- |
+| "Must call initialize first" or "Not initialized" | Another client initialized and took over the single session. Reconnect; never probe while another agent is connected. |
+| Tools missing after setup | Most clients load MCP servers only at start. Restart or reload the client. |
+| Connection refused | The editor is not running, the project is not open, plugin execution is off, or the port differs ([connect.md](connect.md)). |
 
-## Importing
+## Importing and layout
 
-- **PBR models look dull or plastic:** they were imported as Phong because
-  `editor.importPhysicalAsPhongMaterials` is `true` by default. Set it to `false`
-  before importing, or switch the materials' `pipeline` to "Physical Opaque
-  Textured" afterwards.
-- **The model is huge or tiny:** units differ between tools (centimeters vs
-  meters). Always scale from the measured bounds; never assume a model is in
-  meters.
-- **The model floats or is offset:** the pivot is not at the base or center. Use
-  the placement formula from the layout reference.
-- **Rotation changes the footprint.** Re-measure with `compute_object_bounds`
-  after rotating.
-- **Imports bring their own cameras and lights.** Check the children of the
-  container and delete them if they are not wanted.
+| Symptom | Fix |
+| --- | --- |
+| PBR models look dull or plastic | Imported as Phong. Set `editor.importPhysicalAsPhongMaterials = false` before importing, or switch the materials' `pipeline` to "Physical Opaque Textured". |
+| Model huge or tiny | Units differ. Always scale from the measured bounds. |
+| Model floats or is offset | The pivot is not at the base or center. Use the placement formula ([layout.md](layout.md)). |
+| Footprint wrong after rotating | Rotation changes the footprint. Re-measure with `compute_object_bounds`. |
+| Stray cameras or lights in the scene | Imports bring their own. Delete them from the container. |
+| A wall or prop stands at the origin, inside the scene | A forgotten template container. Place or delete every container ([layout.md](layout.md)). |
+| Duplicate images, textures and materials after importing a kit | Each file imports its own copy of a shared texture. Point meshes at one material; no tool deletes resources ([tools.md](tools.md), `import_scenes`). |
+| `query_resources` floods the context | Filter by name and use `paths`, or use `query_scene_tree`. |
+| Cube looks twice as big as expected | `p1` is 2 m wide. The plane `p0` lies in XY and faces +Z. |
 
-## Rendering
+## Rendering and baking
 
-- **Packaging fails with "Environment is enabled, but a failure occurred during
-  baking":** set `rendering.environment.material` to the sky material.
-- **Shadows stop a few meters from the camera:** the sun's `shadowRange` (default
-  10 m) is smaller than the scene. Set it to the scene's size (diagonal plus
-  margin) via `modifyComponents` on the sun's `light` component.
-- **Effects have no visible effect:** the pipeline feature is missing
-  (`TONEMAPPING`, `GLOBAL_ILLUMINATION`, `GLOBAL_ILLUMINATION_PROBE_VOLUME`,
-  `SSAO`). See the visual-quality reference.
-- **Meshlets enabled on a pipeline but not on its meshes:** every mesh drawn with
-  a meshlet pipeline needs `meshlets: true` on the mesh resource as well.
-- **`--bake gi` says "No probe volume scenario configured":** create a
-  `probeVolumeScenarios` resource and set `gi.probeVolume.scenario` to its id.
-- **`--bake gi` on the command line produces empty GI data** (1.6.1, all
-  platforms): it reports success, but the probes are black, and it overwrites a
-  good bake in `cache/project/scenario.data.bin` and `irradiance.bin`. Bake in the
-  editor window; windowless `--package` reuses that bake.
-- **Dark or bright patches where characters stood at bake time:** animated or
-  moving objects were included in the GI bake. Set `hiddenForLightBaking: true` on
-  them (all objects of the hierarchy) and re-bake.
-- **All GI probes are black after a bake:** someone ran `--bake gi` on the command
-  line. Bake again in the editor window.
-- **`--bake env` with the sky mode is not supported on the command line.** The sky
-  environment bakes during packaging, but **only in an editor with a window**:
-  a windowless editor fails with "Environment is enabled, but a failure occurred
-  during baking". Use an editor with a window for projects with a sky environment.
-- **Textures missing or packaging fails with many large textures:** the texture
-  atlas is full. Increase `rendering.textureAtlasSize` and
-  `rendering.compressedTextureAtlasSize`. The atlas is a sparse virtual texture,
-  so a larger atlas is cheap.
-
-## Querying
-
-- `query_resources` with no filters on a large scene returns everything. Filter by
-  name and use `paths`.
-- The `PrimitiveCube` mesh (`p1`) is 2 m wide, not 1 m. The plane `p0` lies in XY
-  and faces +Z.
+| Symptom | Fix |
+| --- | --- |
+| Effect switched on but no visible change | The pipeline feature is missing (`TONEMAPPING`, `GLOBAL_ILLUMINATION`, `GLOBAL_ILLUMINATION_PROBE_VOLUME`, `SSAO`, `WITH_EMISSIVE`) ([visual-quality.md](visual-quality.md)). |
+| "Environment is enabled, but a failure occurred during baking" | Set `rendering.environment.material` to the sky material. In a window, package once more. Windowless editors cannot bake the sky ([visual-quality.md](visual-quality.md), "Sky environment bake"). |
+| Shadows stop a few meters from the camera | Raise the sun's `shadowRange` (default 10 m) to the scene diagonal plus margin. |
+| All GI probes black | Someone ran `--bake gi` on the command line (writes zeros in 1.6.1). Bake in the editor window. |
+| `--bake gi` says "No probe volume scenario configured" | Create a `probeVolumeScenarios` resource and set `gi.probeVolume.scenario`. Then bake in the window anyway. |
+| Dark or bright patches where characters stood at bake time | Moving objects were baked. Set `hiddenForLightBaking: true` on their whole hierarchy and re-bake. |
+| Interiors dark after a GI bake | Sun too weak or not entering through openings; point lights do not bake ([visual-quality.md](visual-quality.md), "Light sources for the bake"). |
+| Windowless packaging fails: "Found probe volume scenario with no filename" | Package GI projects from an editor with a window. |
+| Meshlets on, but no effect or packaging errors | Both the pipeline and every mesh drawn with it need `meshlets: true`. |
+| Textures missing, or packaging fails with many large textures | Texture atlas full. Increase `rendering.textureAtlasSize` and `rendering.compressedTextureAtlasSize` (cheap: sparse virtual texture). |
+| Everything glows | Bloom `threshold` below 1. |
 
 ## Publishing
 
-- **`SELF_SIGNED_CERT_IN_CHAIN` when publishing:** a server certificate chains to a
-  root that the editor's Node.js 18 does not know (this happened from 14 to
-  18 November 2026 for `cloud.wonderland.dev`). The editor's Node.js ignores
-  `NODE_EXTRA_CA_CERTS`. The `publish_page` MCP tool adds the system CA bundle and
-  the SSL.com 2022 root to its requests, so use it. Report the error to the user;
-  the lasting fix is on the server.
-- **`ERR_REQUIRE_ESM` from `@wonderlandcloud/cli`:** version 0.2.36 loads the
-  ESM-only `uuid@13` with `require()`, which fails on Node.js older than 20.19 and
-  on Node.js 18. Run the CLI with system Node.js 20 or newer (22 or newer to be
-  safe). The `publish_page` tool works around this.
-- **`publish_page` fails with "This project is already published as ...":** the
-  project has a `deployment.json` and you passed a different `pageName`. A
-  published project is always updated, never published a second time. Call
-  `publish_page` without `pageName`. To publish to a different page, the user has
-  to delete `deployment.json`. Ask first.
-- **`publish_status` stays at `waiting_for_confirmation`:** the user has not
-  confirmed in the browser. Give them `confirmUrl`. After 5 minutes the publish
-  fails and you start a new one.
+| Symptom | Fix |
+| --- | --- |
+| `publish_page`: "This project is already published as ..." | The project has a `deployment.json` and you passed another `pageName`. Call it without `pageName`. Publishing to another page needs the user to delete `deployment.json`; ask first. |
+| `publish_status` stays at `waiting_for_confirmation` | The user has not confirmed. Give them `confirmUrl`. After 15 minutes the publish fails; start a new one. |
+| `ERR_REQUIRE_ESM` from `@wonderlandcloud/cli` | CLI 0.2.36 on Node.js 18. Use `@wonderlandcloud/cli@0.2.37` or newer. |
+| `SELF_SIGNED_CERT_IN_CHAIN` | A server certificate chain the editor's Node.js 18 does not trust (happened 14-18 November 2026, fixed on the server). The `publish_page` tool trusts the system CA bundle as well. Report it to the user. |
+| Published page loads an empty page | `deploy/index.html` was empty or missing at upload time (packaging still running, or failed). Wait for "Packaging successful!", check the file, publish again. |
+| New page does not load | The domain's SSL certificate takes a few minutes, up to 30 minutes. |

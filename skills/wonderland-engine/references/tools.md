@@ -115,10 +115,8 @@ resource reference (for example `material`) to an id that does not exist does no
 fail. It silently stores an empty reference. Check the id with `query_resources`
 first.
 
-`hiddenForLightBaking: true` excludes the object from GI baking.
-
-`modify_objects` only knows the keys shown above, plus `hiddenForLightBaking`, and
-**rejects** others with an error naming the key. To set other object properties,
+`modify_objects` also takes `hiddenForLightBaking` (`true` excludes the object
+from GI baking). It **rejects** any other key with an error naming the key. To set other object properties,
 use `modify_resources` with `"resourceType": "objects"`:
 `{"resourceType": "objects", "id": "<id>", "changeProperties": {"<key>": ...}}`.
 

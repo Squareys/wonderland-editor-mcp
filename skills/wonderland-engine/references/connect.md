@@ -119,9 +119,6 @@ curl -s -X POST http://localhost:3020/mcp \
   | sed -n 's/^data: //p'
 ```
 
-A new `initialize` replaces any other client's session. If an agent or the MCP
-inspector is connected, it loses its connection.
-
 ## Checking the connection
 
 1. Call `query_settings` with `{"paths": ["project"]}`. It is cheap and returns the

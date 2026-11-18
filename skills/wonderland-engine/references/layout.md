@@ -131,8 +131,8 @@ Before reporting a layout as done, and after every change that moves things:
 4. Walls are thin: characters and props keep at least 0.3 m to them on the room
    side. Check with a second call: `objectIds` = the characters, props and walls,
    `minGap: 0.3`.
-5. Characters need extra care: their bounds include weapons, capes and arms, and
-   their pivot is often not at the feet's center. Place them by measured bounds.
+5. Characters: their bounds include weapons, capes and arms (see "Asset
+   specifics"). Place them by measured bounds.
 6. Take a screenshot from inside the room and look along the walls.
 7. Choose `minGap` by object kind. For grid-based modular kits (road, wall or
    floor tiles) use `minGap: 0` between tiles: a positive `minGap` reports every

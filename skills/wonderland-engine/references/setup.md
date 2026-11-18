@@ -188,7 +188,6 @@ baked GI probe volume. Use a window for projects that use either (most projects
 that follow the visual-quality baseline); windowless suits CI, packaging of
 simple projects and code-only work.
 
-
 ```sh
 WonderlandEditor --windowless --project "$PWD/<Name>.wlp" --enable-plugins --server --watch
 ```
@@ -235,9 +234,6 @@ port. Never reuse the ports of the running editor.
    and call `save_project`.
 5. Restart the editor with `--server`.
 6. Connect your client to the new MCP port (`http://localhost:3021/mcp`).
-
-An editor started before the project's `js/` folder existed does not watch it.
-Create `js/` first, or restart this editor once afterwards.
 
 ## Step 8: Connect, make the project packageable, open the preview
 

@@ -1,8 +1,9 @@
 # Making the scene look good and run fast
 
-Wonderland Engine targets the web, including phones and standalone VR headsets.
-Every effect costs frame time. Turn effects on deliberately, then check the result
-(see [visual-check.md](visual-check.md)).
+Turn effects on deliberately, then check the result
+(see [visual-check.md](visual-check.md)). Budget like a native engine on the same
+target device (see the preface in SKILL.md); phones and standalone VR headsets need
+lighter settings than desktops.
 
 ## How effects are switched on
 
@@ -47,7 +48,7 @@ Apply in this order, saving after each step:
 | --- | --- | --- |
 | 1 | PBR materials | Before importing: `editor.importPhysicalAsPhongMaterials = false`. Otherwise glTF materials come in as Phong. For already imported materials, set `pipeline` to "Physical Opaque Textured"; their `Physical` values are already filled. |
 | 2 | Sky | Create a material on the "AtmosphericSky" pipeline (`AtmosphericSky.direction` is the sun direction, `exposure` ~0.5). Set `rendering.sky = {enabled: true, material: <id>}`. |
-| 3 | Environment lighting (image-based lighting) | `rendering.environment = {enabled: true, bakingMode: "sky", material: <same sky material>}` and pipeline feature `GLOBAL_ILLUMINATION`. The `material` is required, or packaging fails with "Environment is enabled, but a failure occurred during baking". The first packaging after enabling it can fail even in a window; package again (see the `--bake env` note below). |
+| 3 | Environment lighting (image-based lighting) | `rendering.environment = {enabled: true, bakingMode: "sky", material: <same sky material>}` and pipeline feature `GLOBAL_ILLUMINATION`. The `material` is required, or packaging fails with "Environment is enabled, but a failure occurred during baking". Bakes only in an editor with a window; see "Sky environment bake" below. |
 | 4 | Sun | An object with a `light` component `{type: "sun", intensity: 3, shadows: true}`, rotated to match the sky's sun direction. Pipeline feature `SHADOW_PCF` softens shadows. |
 | 4b | Shadow distance | The sun's `shadowRange` (default 10 m) limits how far from the camera shadows render; beyond it they stop. Set it to the largest distance the camera can see inside the scene (e.g. the room diagonal plus a margin: a 12 x 12 m hall needs about 20 m). Keep `cascadeCount` 4 so near shadows stay sharp. Update it whenever the scene grows. |
 | 5 | Tonemapping | `rendering.hdr.tonemapping = "aces"` (or "khronos pbr neutral" for accurate product colors) and pipeline feature `TONEMAPPING`. Without the feature, bright areas clip. |
@@ -61,160 +62,149 @@ Probe volumes bake indirect light (light bouncing off surfaces) into probes, als
 for moving and skinned objects. Use them for any scene with enclosed spaces, colored
 surfaces, or where objects look pasted on.
 
+### 1. Set up the volume
+
 1. Create a scenario: `modify_resources` with
    `{"resourceType": "probeVolumeScenarios", "changeProperties": {"name": "Default"}}`.
 2. Configure the volume to enclose the scene:
    `gi.probeVolume = {enabled: true, scenario: "<id>", translation: [cx, cy, cz], scaling: [hx, hy, hz], minProbeSpacing: 0.5}`.
    `scaling` is half the size per axis. Take the scene bounds from your layout
-   ledger and add a margin.
-
-   The volume must enclose the floor. Probes at floor level or below catch the
-   light that bounces off the ground, so extend the volume about 0.5 m below
-   ground level, and leave a margin around the scene on all sides. Example, a
-   12 x 12 m floor with objects up to about 2 m high:
-   `translation: [0, 1.25, 0], scaling: [6.5, 1.75, 6.5]`. The volume then spans
-   x and z from -6.5 to 6.5 and y from -0.5 to 3.0.
+   ledger and add a margin on all sides. Extend the volume about 0.5 m below
+   ground level: probes at floor level catch the light that bounces off the
+   ground. Example, a 12 x 12 m floor with objects up to about 2 m high:
+   `translation: [0, 1.25, 0], scaling: [6.5, 1.75, 6.5]` (x and z from -6.5 to
+   6.5, y from -0.5 to 3.0).
 3. Turn on the pipeline feature `GLOBAL_ILLUMINATION_PROBE_VOLUME`.
-3a. **Make the sun strong.** With probe volumes, interiors are lit mostly
-   indirectly: sunlight comes in through windows and doors and bounces. A sun of
-   intensity 3 leaves rooms dark; use a very strong sun (tens, tune by screenshot
-   after a bake) aimed so it actually enters through the openings (direction from
-   the opening to a floor spot inside). Control overall brightness with exposure,
-   not by weakening the sun.
-
-   **Check the sun's direction visually** before baking: compute the rotation,
-   apply it, and ask the user (or look) whether the light falls where planned,
-   e.g. on the windowsill and the floor inside the window. A wrongly signed
-   direction lights the scene from exactly the opposite side; then rotate the sun
-   object by 180° around Y (multiply its rotation by `[0, 1, 0, 0]` from the left).
-   Keep the sky material's `AtmosphericSky.direction` pointing towards the sun.
-
-   **Compute both from the sun's elevation `e` and azimuth `a`.** Measure `a`
-   from +Z towards +X (a yaw angle). The vector towards the sun is
-   `s = [sin(a)*cos(e), sin(e), cos(a)*cos(e)]`.
-   - Set the sky material's `AtmosphericSky.direction` to `s`.
-   - The sun light must shine along `-s`. Rotate the sun object by yaw and pitch
-     so that its light axis points along `-s`. The light axis convention can
-     differ from what you expect, so check it visually (see above). If the scene
-     lights from the wrong side, rotate the sun object by 180° around Y.
-
-   `query_settings` has no fog setting in 1.6.1.
-   A late-afternoon angle (about 20-35° above the horizon) gives longer, more
-   interesting light shafts than a high noon sun.
-3b. **Point lights and spot lights do not contribute to the GI bake.** Only
-   emissive surfaces (and the sky/environment) put light into the probes. For
-   every light source that should light the room indirectly (torches, lamps,
-   candles, windows), add a small emissive mesh at the light: e.g. sphere `p2`
-   scaled to about 0.05-0.1 m, a Physical material with a strong `emissiveColor`
-   in the light's colour, pipeline feature `WITH_EMISSIVE`. Keep it in the bake.
-   Keep the point light too: it provides the direct light and shadows at runtime.
-   The emissive mesh is only needed for the bake; it can double as the visible
-   flame or bulb. Bloom does not need it: any bright pixel above the bloom
-   threshold glows, e.g. the flame particles.
-3c. **Exclude everything that moves from the bake:** animated characters, doors
-   that open, vehicles, anything a script moves. Set `hiddenForLightBaking: true`
-   on every object of such a hierarchy (the container and all its descendants):
-   `modify_objects {"modifications": [{"id": "<id>", ...}]}` does not cover this
-   top-level property, so use `modify_resources` with
-   `{"resourceType": "objects", "id": "<id>", "changeProperties": {"hiddenForLightBaking": true}}`.
-   Baked into the probes, they would leave light and shadow at their bake-time
-   position. They still receive GI from the probes at runtime.
-4. Call `save_project`, then ask the user to bake. Only the Bake button in the
-   editor window produces correct GI data; no MCP tool, command-line flag or
-   plugin can start it, and you must not try to automate the click.
-
-   - If the editor runs windowless, ask the user whether you may restart it with
-     a window: `save_project`, stop it, start it again without `--windowless`
-     (keep `--enable-plugins --server`). Only one editor can run at a time.
-   - Tell the user, in one message: "Please open Project Settings, go to the
-     Global Illumination section, and press Bake. The bake runs in the background
-     and can take several minutes or longer; the editor shows the
-     progress. I'll watch for it to finish."
-
-   **Watch that the bake started and the editor stays alive.** The editor logs no
-   line when a bake starts (1.6.1), so ask the user to confirm they pressed Bake
-   and that the progress bar runs. While waiting, check every poll that the editor
-   still runs (its MCP port answers, or the process exists): an editor crash ends
-   the bake silently, and the file then never changes. If the editor is gone, tell
-   the user at once, restart it, and ask them to bake again.
-
-   **Watch for completion** (all three):
-
-   1. **File (main signal).** `cache/project/<scenario filename>` (default
-      `scenario.data.bin`, the `filename` of the `probeVolumeScenarios` resource)
-      gets a newer modification time when the bake finishes. Note the time before
-      the user presses Bake, then poll it. Do not call MCP tools that change the
-      scene while the bake runs.
-   2. **Log line (confirmation).** The editor logs `Probe volume baked in <seconds> s`.
-      The log file may only be written out with a delay (e.g. at the next
-      packaging), so do not wait for it before checking the file. Count the lines
-      before the bake and look for one more in the newest log file, or in the
-      editor's console output if you started it yourself:
-
-      | Platform | Log folder |
-      | --- | --- |
-      | Linux, macOS | `~/.WonderlandEngine/logs/` |
-      | Windows | `%APPDATA%\WonderlandEngine\logs\` |
-   3. **Content.** The file is not all zeros after its 88-byte header, e.g.:
-
-      ```sh
-      python3 -c "d=open('cache/project/scenario.data.bin','rb').read()[88:]; print('zero %.1f%%' % (100*d.count(0)/len(d)))"
-      ```
-
-      A healthy bake has few zero bytes; 100 % means black probes.
-
-   The bake in the editor window is slow: minutes for a small scene, much longer
-   for big scenes or weak machines. There is no fixed timeout. Check less often
-   as time passes (every 10 seconds at first, every minute after a few minutes),
-   and every 10 minutes or so ask the user for the progress the editor shows,
-   instead of assuming it failed. Once all three checks pass, the next packaging includes the new GI data: take a
-   screenshot and compare.
-
-   **Never run `WonderlandEditor --windowless --bake gi`** (1.6.1, all platforms):
-   it reports "Probe volume baked" and exits with 0, but writes empty data (all
-   zeros, so black probes). It also **overwrites a good bake** from the editor
-   window. The bake result lives in `cache/project/scenario.data.bin` and
-   `cache/project/irradiance.bin`.
-
-   Baking once in the window is enough: later windowless packaging
-   (`--windowless --package`) reuses those two files. Keep them (copy them along
-   if the project is built elsewhere, e.g. in CI) and re-bake in the window only
-   after static geometry or lights changed.
-
-   **Version control:** a plain `cache/` entry in `.gitignore` drops the bake. Pick
-   one of two ways:
-   - Ignore `cache/` but commit the bake files on purpose: `scenario.data.bin`
-     and `irradiance.bin` for GI, and `environment.bin` and
-     `environment-mip-*.png` for the sky environment. In `.gitignore` use
-     `cache/*` and `!cache/<project-name>/`, then ignore the other files inside that
-     folder if you do not want them. Adapt the lines to how the folder is named.
-   - Re-bake in the window after every checkout.
-
-   Also ignore `.editor/` (editor UI state).
-
-   The cache subfolder is named after the project (see pitfalls.md, "Renaming the
-   project").
-
-5. Re-bake after moving, adding or removing static geometry or lights. An
-   out-of-date bake still looks plausible, so it is easy to miss. Do not ask after
-   every small change (a bake takes minutes): collect the changes, and ask the
-   user to bake **once at the end of the task**, before you report it as done.
-   If the scene grew, resize the probe volume first.
 
 `minProbeSpacing` trades quality for download size and bake time: 0.5 m for rooms,
-1–2 m for large outdoor areas.
+1-2 m for large outdoor areas.
 
-Note: `--bake env` does not support the sky baking mode on the command line. Sky
-environments bake during packaging, and only in an editor with a window; a
-windowless editor fails packaging with "Environment is enabled, but a failure
-occurred during baking". Work with a windowed editor for such projects.
+### 2. Light sources for the bake
 
-Even in an editor with a window, the first packaging after you enable the sky
-environment can still fail with that message. The bake runs within about a
-second; package again and it succeeds. A later windowless `--package` reuses the
-result from `cache/<project-name>/environment.bin` and
-`environment-mip-*.png`. Keep these files like the GI bake files (see "Version
-control" above).
+- **Make the sun strong.** With probe volumes, interiors are lit mostly
+  indirectly: sunlight comes in through windows and doors and bounces. A sun of
+  intensity 3 leaves rooms dark; use a very strong sun (tens, tune by screenshot
+  after a bake) aimed so it actually enters through the openings. Control overall
+  brightness with exposure, not by weakening the sun. A late-afternoon angle
+  (about 20-35° above the horizon) gives longer light shafts than a noon sun.
+- **Compute the sun from its elevation `e` and azimuth `a`** (`a` measured from
+  +Z towards +X, like a yaw). The vector towards the sun is
+  `s = [sin(a)*cos(e), sin(e), cos(a)*cos(e)]`. Set the sky material's
+  `AtmosphericSky.direction` to `s`, and rotate the sun object (yaw and pitch) so
+  that its light shines along `-s`.
+- **Check the sun's direction visually before baking.** The light axis convention
+  can differ from what you expect. Look (or ask the user) whether the light falls
+  where planned, e.g. on the windowsill and the floor inside the window. If the
+  scene is lit from the opposite side, rotate the sun object by 180° around Y
+  (multiply its rotation by `[0, 1, 0, 0]` from the left).
+- **Point and spot lights do not contribute to the bake.** Only emissive surfaces
+  and the sky/environment put light into the probes. For every light source that
+  should light the room indirectly (torches, lamps, candles), add a small emissive
+  mesh at the light: e.g. sphere `p2` scaled to 0.05-0.1 m, a Physical material
+  with a strong `emissiveColor` in the light's colour, pipeline feature
+  `WITH_EMISSIVE`. Keep the point light as well: it gives the direct light and
+  shadows at runtime. The emissive mesh can double as the visible flame or bulb.
+  Bloom does not need it: any pixel above the bloom threshold glows, e.g. flame
+  particles.
+
+`query_settings` has no fog setting in 1.6.1.
+
+### 3. Exclude everything that moves
+
+Animated characters, doors that open, vehicles, anything a script moves: set
+`hiddenForLightBaking: true` with `modify_objects` on every object of such a
+hierarchy (the container and all its descendants). Baked into the probes, they
+would leave light and shadow at their bake-time position. They still receive GI
+from the probes at runtime.
+
+### 4. Bake (the user presses the button)
+
+Call `save_project`, then ask the user to bake. Only the Bake button in the editor
+window produces correct GI data. No MCP tool, command-line flag or plugin can start
+it, and you must not try to automate the click.
+
+- If the editor runs windowless, ask the user whether you may restart it with a
+  window: `save_project`, stop it, start it again without `--windowless` (keep
+  `--enable-plugins --server`).
+- Tell the user, in one message: "Please open Project Settings, go to the Global
+  Illumination section, and press Bake. The bake runs in the background and can
+  take several minutes or longer; the editor shows the progress. I'll watch for
+  it to finish."
+- Do not call MCP tools that change the scene while the bake runs.
+
+**Never run `WonderlandEditor --windowless --bake gi`** (1.6.1, all platforms). It
+reports "Probe volume baked" and exits with 0, but writes all zeros (black probes),
+and it overwrites a good bake from the editor window.
+
+**Watch that the bake started and the editor stays alive.** The editor logs no line
+when a bake starts (1.6.1), so ask the user to confirm they pressed Bake and that
+the progress bar runs. On every poll, check that the editor still runs (its MCP
+port answers, or the process exists): a crash ends the bake silently. If the editor
+is gone, tell the user at once, restart it, and ask them to bake again.
+
+**Watch for completion** (all three):
+
+1. **File (main signal).** `cache/<project-name>/<scenario filename>` (default
+   `scenario.data.bin`, the `filename` of the `probeVolumeScenarios` resource)
+   gets a newer modification time. Note the time before the user presses Bake,
+   then poll it.
+2. **Log line (confirmation).** The editor logs `Probe volume baked in <seconds> s`.
+   The log file can be written with a delay, so do not wait for it before checking
+   the file. Count the lines before the bake and look for one more in the newest
+   log file (or the console output, if you started the editor):
+
+   | Platform | Log folder |
+   | --- | --- |
+   | Linux, macOS | `~/.WonderlandEngine/logs/` |
+   | Windows | `%APPDATA%\WonderlandEngine\logs\` |
+3. **Content.** The file is not all zeros after its 88-byte header:
+
+   ```sh
+   python3 -c "d=open('cache/<project-name>/scenario.data.bin','rb').read()[88:]; print('zero %.1f%%' % (100*d.count(0)/len(d)))"
+   ```
+
+   A healthy bake has few zero bytes; 100 % means black probes.
+
+The bake is slow: minutes for a small scene, much longer for big scenes or weak
+machines. There is no fixed timeout. Poll less often as time passes (every 10
+seconds at first, every minute after a few minutes), and every 10 minutes or so ask
+the user for the progress the editor shows instead of assuming it failed. Once all
+three checks pass, the next packaging includes the new GI data: take a screenshot
+and compare.
+
+### 5. Keep the bake
+
+The bake lives in `cache/<project-name>/scenario.data.bin` and `irradiance.bin`.
+The folder name is the kebab-cased project name (`MyGame` gives `cache/my-game/`).
+
+- Renaming the project (`settings.project.name`) switches to a new, empty cache
+  folder and the bake is lost. Set the name before baking, or copy the files into
+  the new folder and restart the editor.
+- Baking once is enough; every later packaging reuses these files. Package (and
+  publish) GI projects from an editor with a window: a windowless editor fails
+  with "Found probe volume scenario with no filename" (1.6.1).
+- **Version control:** a plain `cache/` entry in `.gitignore` drops the bake.
+  Either ignore `cache/*` but keep `!cache/<project-name>/` (then ignore the other
+  files in it if you like), committing `scenario.data.bin`, `irradiance.bin`,
+  `environment.bin` and `environment-mip-*.png`; or re-bake in the window after
+  every checkout. Also ignore `.editor/` (editor UI state).
+
+### 6. Re-bake when static geometry or lights change
+
+An out-of-date bake still looks plausible, so it is easy to miss. Do not ask after
+every small change (a bake takes minutes): collect the changes and ask the user to
+bake **once at the end of the task**, before you report it as done. If the scene
+grew, resize the probe volume first.
+
+## Sky environment bake
+
+The sky environment (baseline step 3) bakes during packaging, and only in an editor
+with a window. A windowless editor fails with "Environment is enabled, but a
+failure occurred during baking", and `--bake env` does not support the sky mode.
+Even in a window, the first packaging after enabling it can fail with that message;
+package again and it succeeds. The result is stored in
+`cache/<project-name>/environment.bin` and `environment-mip-*.png`; keep these
+files like the GI bake files.
 
 ## Day-night cycles and changing light at runtime
 

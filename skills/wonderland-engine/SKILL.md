@@ -66,13 +66,9 @@ If you are unsure which track you are on, use Track B. It is slower but safe.
 5. **Import, measure, then place.** Every imported model goes through the same loop:
    `import_scenes` → read the returned bounds → compute scale and position → apply
    with `modify_objects` → confirm with `compute_object_bounds`. Never guess a scale
-   or a position. Track every placed object's footprint so nothing overlaps (see the
-   layout reference).
-   **Nothing may intersect a wall or another object.** Walls, pillars and floors go
-   into the ledger like every prop. Before you report a layout as done, run the
-   final overlap check from the layout reference (`find_overlaps` until it reports
-   no pairs) over **all** objects. A character
-   standing inside a wall is the most visible layout error; never ship it.
+   or a position. Track every placed object's footprint, walls and pillars
+   included, so nothing overlaps (see the layout reference). A character standing
+   inside a wall is the most visible layout error; never ship it.
 6. **Batch tool calls.** Every tool takes arrays. Import all files in one
    `import_scenes` call, change all objects in one `modify_objects` call, measure
    all objects in one `compute_object_bounds` call. One call per object is slow
@@ -102,8 +98,8 @@ When a task is done, go through this list before you report:
    (`gi.probeVolume.enabled`) and you moved, added or removed static geometry or
    lights since the last bake, the baked lighting is out of date. It still looks
    plausible, so it is easy to miss. Ask the user to press Bake now, once, and
-   monitor it (visual-quality reference, probe volumes step 4). Before that, make
-   sure everything animated or moving has `hiddenForLightBaking: true`. Also check that
+   monitor it (visual-quality reference, "Bake"). Before that, make sure
+   everything animated or moving has `hiddenForLightBaking: true`. Also check that
    the probe volume still encloses the whole scene; resize it first if the scene
    grew.
 5. Report what changed, with the final screenshot.
