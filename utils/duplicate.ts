@@ -72,8 +72,12 @@ function objectPropertyNames(
  * stay defaults in the project file. Failures are collected, not thrown, so
  * that one unsupported property does not abort the whole copy.
  */
+/* Read-only identity fields of resources; copying them only produces errors */
+const READ_ONLY_KEYS = new Set(["resourceId", "resourceKey"]);
+
 function copyInto(dst: any, src: any, path: string, errors: string[]) {
   for (const key of Object.keys(src)) {
+    if (READ_ONLY_KEYS.has(key)) continue;
     const v = src[key];
     if (v === "[Circular]") continue;
     let cur: any;
