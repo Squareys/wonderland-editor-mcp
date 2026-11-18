@@ -99,6 +99,24 @@ export class MyComponent extends Component {
   uses a vertical one. When porting, convert with the aspect ratio:
   `horizontal = 2 * atan(tan(vertical / 2) * aspect)`.
 
+## Content created at runtime
+
+Procedural tracks, in-game editors and spawned props are created by code, not in
+the editor. Work like this:
+
+1. Keep one template object per kind in the scene. Deactivate it: set its
+   components' `active = false`, or move it out of view.
+2. Clone a template at runtime with `object.clone(parent)`.
+3. For many spawns, reserve objects up front with
+   `this.engine.scene.reserveObjects(objectCount, componentCountPerType)`, e.g.
+   `reserveObjects(200, { mesh: 200, collision: 50 })` (1.6.1 API).
+4. When no template fits, create meshes through the Mesh API (a `Mesh` built from
+   vertex and index data).
+
+Core rule 5 in SKILL.md and the overlap check apply to content placed in the
+editor. They do not cover runtime content. Validate it in the game code itself
+(for example grid checks for overlaps) and with screenshots.
+
 ## Particles (fire, sparks, dust)
 
 Particles are quick to add; do not skip them. The simplest robust route is

@@ -126,6 +126,11 @@ WonderlandEditor --windowless --accept-eula --create --project "$PWD/<Name>.wlp"
 
 `--create` also starts a web server that watches `deploy/`.
 
+The editor watches the `js/` folder only if it existed when the editor started.
+If you create `js/` later, new components stay unregistered. Create `js/` (with
+its entry file) before the first start, or restart the editor once after
+creating it.
+
 Use an absolute path for `--project`. The new project has no camera, and VR is
 enabled without eye objects, so the first packaging fails; you fix both in step 8.
 
@@ -230,6 +235,9 @@ port. Never reuse the ports of the running editor.
    and call `save_project`.
 5. Restart the editor with `--server`.
 6. Connect your client to the new MCP port (`http://localhost:3021/mcp`).
+
+An editor started before the project's `js/` folder existed does not watch it.
+Create `js/` first, or restart this editor once afterwards.
 
 ## Step 8: Connect, make the project packageable, open the preview
 

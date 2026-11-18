@@ -53,6 +53,34 @@ await browser.close();
 Playwright also gives you the page's console output, which shows runtime errors in
 the project's JavaScript components.
 
+## Option 4: visible Chrome with a DevTools Protocol client
+
+Use this when headless Chrome fails (see "Known limits on Linux"). Start a
+visible (not headless) Chrome on the user's display with its own profile and a
+debugging port:
+
+```sh
+google-chrome-stable --user-data-dir=/tmp/wle-cdp-profile \
+  --remote-debugging-port=9222 http://localhost:8080/
+```
+
+Then talk to it with a small Chrome DevTools Protocol client. Python's standard
+library is enough: open the websocket from `http://localhost:9222/json` over a
+raw socket. It gives you:
+
+- `Page.captureScreenshot` for screenshots.
+- `Input.dispatchKeyEvent` and `Input.dispatchMouseEvent` for simulated input.
+- `Runtime` console events for the page's console output.
+
+Warnings:
+
+- The window appears on the user's screen and takes keyboard focus.
+- The user may interact with it.
+- Tell the user before you open it, and close it when you are done.
+- To stop it, kill the PID that owns the debugging port
+  (`ss -ltnp | grep :9222`). `pkill -f` patterns can match your own shell
+  command.
+
 ## Important: no browser connected while you edit
 
 Wonderland Editor 1.6.1 can crash ("munmap_chunk(): invalid pointer" right after

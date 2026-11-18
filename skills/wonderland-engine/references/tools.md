@@ -110,6 +110,11 @@ out stay as they are.
 
 Returns one `{"id", "name", "created"}` per modification. Keep the ids.
 
+`parentId` also works on an existing object: it reparents the object. Setting a
+resource reference (for example `material`) to an id that does not exist does not
+fail. It silently stores an empty reference. Check the id with `query_resources`
+first.
+
 `hiddenForLightBaking: true` excludes the object from GI baking.
 
 `modify_objects` only knows the keys shown above, plus `hiddenForLightBaking`, and
@@ -193,6 +198,15 @@ imports under it. It returns one entry per imported root:
 
 `count` is the number of descendants of that root. It is 0 for a single-object
 root and for files with several roots. Do not use it as a node count of the file.
+
+Files with several roots return several entries, one per root. Group them by
+`containerId`.
+
+A texture shared by several files of one kit (for example a colormap) is imported
+once per file. That gives duplicate images, textures and materials, and all of
+them are packaged. To avoid the duplicates, point the meshes to one material with
+`modify_objects` (`modifyComponents`). No tool deletes resources, only objects,
+so the unused copies stay in the project.
 
 The bounds are in the container's space. Place and scale the **container**
 (`containerId`), not the root. See the layout reference.

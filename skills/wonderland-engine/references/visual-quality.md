@@ -27,6 +27,15 @@ Then set features on those pipelines, typically "Physical Opaque" and
   "SSAO": true, "SHADOW_PCF": true }}}]}
 ```
 
+To get a pipeline that does not exist yet (for example transparent with
+blending, or with vertex colours), create one with `modify_resources` on
+`pipelines`. Copy the shader of an existing pipeline (query it first), then set
+`features` and the blending.
+
+Flat pipelines with the `TONEMAPPING` feature darken sRGB colours. Leave
+`TONEMAPPING` off on Flat pipelines used for UI or unlit colours, or brighten the
+colours to compensate.
+
 Setting names change between editor versions. Read them with `query_settings`
 first.
 
