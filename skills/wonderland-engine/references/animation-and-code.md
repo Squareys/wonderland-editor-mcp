@@ -75,6 +75,17 @@ export class MyComponent extends Component {
   them; the log shows `[js] Added my-component`. Check with
   `query_component_types {"names": ["my-component"]}` before adding the component
   with `modify_objects`.
+- `Property.enum(["a", "b"], "a")` gives the component the **index** of the
+  value (0, 1, ...), not the string. Compare with the index, or map it back
+  through the same array.
+- The editor loads component modules itself (without a browser) to read their
+  properties. Code at module top level must not touch browser APIs (`window`,
+  `document`, `addEventListener`); otherwise the editor logs "Error parsing
+  components from sources" and stops seeing new properties. Do such setup in
+  `start()` or `init()`, or guard it (`typeof window !== "undefined"`).
+- Add a small on-page error overlay during development (catch `window.onerror`,
+  `unhandledrejection` and `console.error`, show them in a visible element),
+  so runtime errors are visible to the user and in screenshots without DevTools.
 - The editor bundles the code with esbuild on save. Watch the editor log for
   bundling errors and the browser console (Playwright) for runtime errors.
 - Saving a code file repackages the project; see the "no browser connected"
