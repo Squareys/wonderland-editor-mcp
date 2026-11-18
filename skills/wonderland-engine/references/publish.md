@@ -131,6 +131,10 @@ handle a long-lived token.
 4. Pass the token to the next command only through the environment, e.g.
    `WLE_CREDENTIALS=<token> npx -y @wonderlandcloud/cli page create ...`. Do not
    write it to a file or print it.
+5. The token stays valid for several commands in a row, so one confirmation
+   covers a whole first publish: `page create`, then set `project.coverImage` to
+   the absolute URL of the new domain (from `deployment.json`), let the editor
+   package, then `page update` with the same token.
 
 If the poll times out, ask whether the user confirmed, then start over with a new
 action.
@@ -203,3 +207,13 @@ user selects it, clicks publish, signs in in the browser window that opens, and
 confirms. Progress shows in the editor console. Prefer the MCP tools when you work
 autonomously; they need no clicks in the editor. The built-in plugin fails on
 Node 18 with a certificate error (see [pitfalls.md](pitfalls.md#publishing)).
+
+## Speed
+
+Compressing and uploading through the CLI takes seconds (about 0.4 s to compress a
+10 MB deploy folder, under 10 s in total). The same upload run from inside the
+editor (the MCP `publish_page` tool) can take much longer, because the editor's
+embedded Node.js only processes the work between frames, especially when the editor
+window is not in focus. The browser confirmation is usually the longest step; tell
+the user when to confirm.
+
