@@ -941,7 +941,21 @@ server.registerTool(
         } catch {
           // Only used for remapping JavaScript component references
         }
-        return duplicateObjects(data, duplicates, componentTypes);
+        /* Roll back partially created copies if anything fails */
+        const before = new Set(Object.keys(data.objects as any));
+        try {
+          return duplicateObjects(data, duplicates, componentTypes);
+        } catch (e) {
+          for (const id of Object.keys(data.objects as any)) {
+            if (before.has(id)) continue;
+            try {
+              delete (data.objects as any)[id];
+            } catch {
+              /* Already removed together with its parent */
+            }
+          }
+          throw e;
+        }
       });
       return {
         content: [

@@ -279,14 +279,27 @@ export function materialize(input: any): any {
       }
       const len = Math.max(v.length, max + 1);
       const out = new Array(len);
-      for (let i = 0; i < len; i++) out[i] = rec(v[i]);
+      for (let i = 0; i < len; i++) {
+        try {
+          out[i] = rec(v[i]);
+        } catch {
+          out[i] = null;
+        }
+      }
       return out;
     }
 
     // Copy own + inherited enumerable keys (triggers interceptors/getters)
     const out: any = {};
     for (const k in v) {
-      const value = rec((v as any)[k]);
+      /* Getters of dangling resource references throw ("resource does not
+       * exist"); skip those properties instead of failing the whole read. */
+      let value: any;
+      try {
+        value = rec((v as any)[k]);
+      } catch {
+        continue;
+      }
       if (value !== undefined) out[k] = value;
     }
     return out;

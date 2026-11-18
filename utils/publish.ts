@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { data, tools, workspace } from "@wonderlandengine/editor-api";
 import { loadCloudClient } from "./cloud-client.js";
@@ -191,7 +191,7 @@ async function run(
   hasConfig: boolean
 ) {
   installExtraCaCertificates();
-  await tools.packageProject();
+  await packageForUpload();
 
   /* One-time token, confirmed by the user in the browser */
   const actionId = await fetch(`${API_URL}/auth/action`, {
@@ -288,3 +288,40 @@ function pollToken(actionId: string): Promise<string> {
     }, POLL_INTERVAL_MS);
   });
 }
+
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Package the project and make sure the deploy folder is complete before it is
+ * uploaded. Another packaging run (triggered by a concurrent change) can be
+ * active at the same time; packageProject() then fails with "already
+ * packaging", and an upload during a run can catch half-written files (e.g.
+ * an empty index.html). Retry until our own run succeeded, then wait until
+ * index.html is non-empty and stable.
+ */
+async function packageForUpload() {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 10; ++attempt) {
+    try {
+      await tools.packageProject();
+      lastError = null;
+      break;
+    } catch (e) {
+      lastError = e;
+      await delay(2000);
+    }
+  }
+  if (lastError !== null)
+    throw new Error(`Packaging failed, see the editor log (${String(lastError ?? "")}).`);
+
+  const index = join(workspace.deployPath, "index.html");
+  let lastSize = -1;
+  for (let i = 0; i < 20; ++i) {
+    const size = existsSync(index) ? statSync(index).size : 0;
+    if (size > 0 && size === lastSize) return;
+    lastSize = size;
+    await delay(500);
+  }
+  throw new Error("deploy/index.html is missing or empty after packaging; not uploading.");
+}
+

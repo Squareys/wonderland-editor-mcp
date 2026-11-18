@@ -68,14 +68,34 @@ export default class Index extends EditorPlugin {
       /* Package once all commands finished (some, like imports, are async).
        * Defer to after the change handlers consumed the changes. */
       Promise.allSettled(pending).then(() =>
-        setTimeout(() => {
-          tools.packageProject().catch((e: unknown) => {
-            /* Packaging errors are reported in the editor log already,
-             * e.g. a missing view object. Don't crash the plugin. */
-            console.warn("[mcp] packaging failed", e ?? "");
-          });
-        }, 0)
+        setTimeout(() => this.requestPackage(), 0)
       );
     }
+  }
+
+  /* Coalesce packaging: while one run is active, further requests only mark
+   * that one more run is needed. Overlapping runs fail with "editor is
+   * already packaging", and each run reloads connected preview clients. */
+  private packaging = false;
+  private packageAgain = false;
+
+  private requestPackage() {
+    if (this.packaging) {
+      this.packageAgain = true;
+      return;
+    }
+    this.packaging = true;
+    this.packageAgain = false;
+    tools
+      .packageProject()
+      .catch((e: unknown) => {
+        /* Packaging errors are reported in the editor log already,
+         * e.g. a missing view object. Don't crash the plugin. */
+        console.warn("[mcp] packaging failed", e ?? "");
+      })
+      .finally(() => {
+        this.packaging = false;
+        if (this.packageAgain) this.requestPackage();
+      });
   }
 }
