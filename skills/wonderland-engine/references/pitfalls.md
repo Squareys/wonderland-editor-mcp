@@ -35,7 +35,7 @@ installing the plugin.
 
 - **The cache folder is named after the project** (`cache/<project-name>/`, e.g.
   `cache/project/` for the default name). The folder name is the kebab-cased
-  project name: `RacetrackWLE` gives `cache/racetrack-wle/`. Changing `settings.project.name`
+  project name: `MyGame` gives `cache/my-game/`. Changing `settings.project.name`
   moves it to a new, empty folder: the GI bake (`scenario.data.bin`,
   `irradiance.bin`) is no longer found, packaging fails with "Found probe volume
   scenario with no filename. Ensure it is compiled", and a publish during that
