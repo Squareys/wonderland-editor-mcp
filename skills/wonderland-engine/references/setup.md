@@ -146,6 +146,11 @@ flatpak run --env=NPM_CLI_JS=/app/share/wonderlandengine/npm/index.js \
   --command=npm com.wonderlandengine.editor i -D @wonderlandengine/mcp-plugin
 ```
 
+To get unreleased tools, install the plugin from a local checkout instead:
+`npm i -D <path to wonderland-editor-mcp checkout>`. For the Flatpak, use the same
+`NPM_CLI_JS` command as above with that path. The checkout must be built first:
+run `npm run build` in it.
+
 Then enable the plugin for the project. **With the editor stopped**, add this entry
 to the top-level `plugins` object of the `.wlp` file (the one case where you edit
 the project file directly):
@@ -188,7 +193,10 @@ A JSON-RPC result means the server runs. Probing re-initializes the plugin's sin
 session, so connect your real client after probing, not before.
 
 If the log shows `[mcp][error] ... EADDRINUSE`, another editor still runs. Stop it
-(`flatpak kill com.wonderlandengine.editor` for Flatpak) and start again.
+and start again. `flatpak kill com.wonderlandengine.editor` stops ALL editor
+instances; use it only when no other editor runs. Otherwise stop one editor by its
+process id: find it with `ss -ltnp | grep :<mcp port>` (Linux) and run
+`kill <pid>`.
 
 **Linux: windowless still needs a display.** The editor opens an X11 display even
 with `--windowless`. Without one it crashes with a segmentation fault (exit 139)
@@ -199,6 +207,21 @@ On a machine without a desktop, run it under `xvfb-run -a WonderlandEditor ...`.
 "Initializing Plugin: PluginsView"), set `__GL_THREADED_OPTIMIZATIONS=0`. For the
 Flatpak, ask the user before making it permanent:
 `flatpak override --user --env=__GL_THREADED_OPTIMIZATIONS=0 com.wonderlandengine.editor`.
+
+### Running beside another editor
+
+A second editor (for another project) needs its own MCP port and its own preview
+port. Never reuse the ports of the running editor.
+
+1. MCP port: set `WLE_MCP_PORT` in the editor's environment, e.g.
+   `WLE_MCP_PORT=3021 WonderlandEditor ...`. With Flatpak:
+   `flatpak run --env=WLE_MCP_PORT=3021 com.wonderlandengine.editor ...`.
+2. Preview port: the project setting `editor.serverPort` (default 8080), e.g. 8081.
+3. Start the editor once without `--server`.
+4. Set the port with `modify_settings {"changeSettings": {"editor": {"serverPort": 8081}}}`
+   and call `save_project`.
+5. Restart the editor with `--server`.
+6. Connect your client to the new MCP port (`http://localhost:3021/mcp`).
 
 ## Step 8: Connect, make the project packageable, open the preview
 

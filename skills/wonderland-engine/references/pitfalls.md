@@ -31,12 +31,31 @@ The first packaging fails with "Left and right eye objects need to be set" and t
 exists. It does not write `package.json`; create one with `npm init -y` before
 installing the plugin.
 
+## Renaming the project
+
+- **The cache folder is named after the project** (`cache/<project-name>/`, e.g.
+  `cache/project/` for the default name). Changing `settings.project.name`
+  moves it to a new, empty folder: the GI bake (`scenario.data.bin`,
+  `irradiance.bin`) is no longer found, packaging fails with "Found probe volume
+  scenario with no filename. Ensure it is compiled", and a publish during that
+  can upload an empty `index.html`. Set the project name before baking, or
+  copy the files from the old cache folder into the new one and restart the
+  editor.
+
 ## Editor process
 
+- **Never close or restart an editor the user may be working in** (a bake can be
+  running, which ends silently with the editor). Ask first and wait for the
+  answer.
+- **Windowless editors cannot package projects with a baked GI probe volume**
+  (the scenario is not compiled: "Found probe volume scenario with no
+  filename"). Package and publish such projects from an editor with a window.
 - **Only one editor per port.** A second editor cannot bind port 3020 (MCP) or 8080
   (preview). The log then shows `[mcp][error] ... EADDRINUSE`. Stop the old one.
-- **Stopping the Flatpak editor:** `flatpak kill com.wonderlandengine.editor`. The
-  process is named `Main`, so `pkill WonderlandEditor` misses it.
+- **Stopping the Flatpak editor:** `flatpak kill com.wonderlandengine.editor` stops
+  ALL editor instances. Use it only when no other editor runs. Otherwise stop one
+  editor by its process id: find it with `ss -ltnp | grep :<mcp port>` (Linux) and
+  run `kill <pid>`. The process is named `Main`, so `pkill WonderlandEditor` misses it.
 - **Linux, `--windowless` crashes with exit code 139** right after "Running in
   windowless mode": no X11 display. Set `DISPLAY`, or run under `xvfb-run -a`.
 - **Linux with NVIDIA, the editor crashes at startup** (after

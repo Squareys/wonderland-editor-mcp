@@ -161,6 +161,16 @@ surfaces, or where objects look pasted on.
    if the project is built elsewhere, e.g. in CI) and re-bake in the window only
    after static geometry or lights changed.
 
+   **Version control:** a plain `cache/` entry in `.gitignore` drops the bake. Pick
+   one of two ways:
+   - Ignore `cache/` but commit the two files on purpose. In `.gitignore` use
+     `cache/*` and `!cache/<project-name>/`, then ignore the other files inside that
+     folder if you do not want them. Adapt the lines to how the folder is named.
+   - Re-bake in the window after every checkout.
+
+   The cache subfolder is named after the project (see pitfalls.md, "Renaming the
+   project").
+
 5. Re-bake after moving, adding or removing static geometry or lights. An
    out-of-date bake still looks plausible, so it is easy to miss. Do not ask after
    every small change (a bake takes minutes): collect the changes, and ask the

@@ -85,8 +85,10 @@ If you are unsure which track you are on, use Track B. It is slower but safe.
    version, then call `modify_settings`.
 9. **Report progress.** During setup, tell the user which step you are on and how
    many are left ("Step 6 of 8: installing the plugin").
-10. **Do not start a second editor.** If the MCP tools respond, the editor already runs.
-   Start it yourself only during setup, or when the user asks.
+10. **Do not start a second editor for the same project or on ports already in use.**
+   If the MCP tools respond, the editor already runs. Start one yourself only during
+   setup, when the user asks, or for a different project on other ports (setup.md,
+   "Running beside another editor").
 
 ## Finishing a scene change
 

@@ -72,6 +72,56 @@ npx -y supergateway --port 3030 \
 
 Then point the client at `http://localhost:3030/sse`.
 
+## Raw HTTP (no MCP client)
+
+Use this only when you must call the server with `curl` or a similar tool and have
+no MCP client. Steps:
+
+1. Send `initialize` with `POST /mcp`. Set the headers
+   `Content-Type: application/json` and
+   `Accept: application/json, text/event-stream`.
+2. Send the `notifications/initialized` notification.
+3. Send `tools/call` requests. Add the headers `mcp-session-id: single-session`
+   (the plugin uses this fixed session id) and `mcp-protocol-version: 2025-03-26`.
+
+Responses arrive as server-sent events. Take the line that starts with `data: ` and
+parse the JSON after it.
+
+Initialize:
+
+```sh
+curl -s -X POST http://localhost:3020/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
+```
+
+Initialized notification:
+
+```sh
+curl -s -X POST http://localhost:3020/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'mcp-session-id: single-session' \
+  -H 'mcp-protocol-version: 2025-03-26' \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+```
+
+Tool call (`query_settings`):
+
+```sh
+curl -s -X POST http://localhost:3020/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'mcp-session-id: single-session' \
+  -H 'mcp-protocol-version: 2025-03-26' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"query_settings","arguments":{"paths":["project"]}}}' \
+  | sed -n 's/^data: //p'
+```
+
+A new `initialize` replaces any other client's session. If an agent or the MCP
+inspector is connected, it loses its connection.
+
 ## Checking the connection
 
 1. Call `query_settings` with `{"paths": ["project"]}`. It is cheap and returns the
