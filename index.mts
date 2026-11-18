@@ -1,4 +1,9 @@
+import { webcrypto } from "node:crypto";
 import { EditorPlugin, ui, tools } from "@wonderlandengine/editor-api";
+
+/* The editor's embedded Node.js 18 has no global `crypto`, which newer
+ * versions of @modelcontextprotocol/sdk use (e.g. crypto.randomUUID()). */
+if (!(globalThis as any).crypto) (globalThis as any).crypto = webcrypto;
 
 import { main, shutdown } from "./server.js";
 import { WorkQueue } from "./utils/work-queue.js";
@@ -54,9 +59,23 @@ export default class Index extends EditorPlugin {
   update() {
     /* Consume all functions in the queue */
     if (!this.queue.empty) {
-      while (this.queue.pop()) ++this.commandsCount;
-      /* Defer packaging to after the change handlers consumed the changes */
-      setTimeout(() => tools.packageProject(), 0);
+      const pending: Promise<void>[] = [];
+      let p: Promise<void> | null;
+      while ((p = this.queue.pop())) {
+        pending.push(p);
+        ++this.commandsCount;
+      }
+      /* Package once all commands finished (some, like imports, are async).
+       * Defer to after the change handlers consumed the changes. */
+      Promise.allSettled(pending).then(() =>
+        setTimeout(() => {
+          tools.packageProject().catch((e: unknown) => {
+            /* Packaging errors are reported in the editor log already,
+             * e.g. a missing view object. Don't crash the plugin. */
+            console.warn("[mcp] packaging failed", e ?? "");
+          });
+        }, 0)
+      );
     }
   }
 }

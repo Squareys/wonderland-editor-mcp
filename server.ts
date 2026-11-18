@@ -107,14 +107,20 @@ async function handleRequest(req: Request, res: Response) {
 app.get("/mcp", handleRequest);
 app.delete("/mcp", handleRequest);
 
+let httpServer: ReturnType<typeof app.listen> | null = null;
+
 export async function main(params: { port: number; queue: WorkQueue }) {
   setQueue(params.queue);
   return new Promise<void>((res, rej) => {
     try {
-      app.listen(params.port, (error?: unknown) => {
+      /* Only resolve once the port is actually bound. A port that is already
+       * in use (e.g. by a second editor instance) must surface as an error. */
+      const s = app.listen(params.port, (error?: unknown) => {
         if (error) rej(error);
+        else res();
       });
-      res();
+      s.once("error", rej);
+      httpServer = s;
     } catch (e) {
       rej(e);
     }
@@ -123,4 +129,6 @@ export async function main(params: { port: number; queue: WorkQueue }) {
 
 export async function shutdown() {
   server.close();
+  httpServer?.close();
+  httpServer = null;
 }

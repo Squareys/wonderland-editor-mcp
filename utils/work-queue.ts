@@ -15,22 +15,31 @@ export class WorkQueue {
   }
 
   /**
-   * Run the top most command in the queue
+   * Run the oldest command in the queue
    *
-   * @returns `true`, if a command was run, `false` if the queue was empty.
+   * Commands run in the order they were pushed, so that e.g. a settings change
+   * followed by an object change is applied in that order.
+   *
+   * @returns Promise that settles when the command finished, or `null` if the
+   *    queue was empty.
    */
-  pop(): boolean {
-    if (this._queue.length == 0) return false;
-    const { func, res, rej } = this._queue.pop()!;
-    func().then(res).catch(rej);
-
-    return true;
+  pop(): Promise<void> | null {
+    const item = this._queue.shift();
+    if (!item) return null;
+    const { func, res, rej } = item;
+    let result: Promise<any>;
+    try {
+      result = Promise.resolve(func());
+    } catch (e) {
+      result = Promise.reject(e);
+    }
+    return result.then(res, rej);
   }
 
   /**
    * Whether the work queue is empty
    */
   get empty() {
-      return this._queue.length == 0;
+    return this._queue.length == 0;
   }
 }

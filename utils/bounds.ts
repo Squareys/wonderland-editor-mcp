@@ -91,16 +91,17 @@ export const quatToMat3RM = (
   const wx = w * x2,
     wy = w * y2,
     wz = w * z2;
-  // Row-major layout
+  // Row-major layout. Previously the transpose (= inverse rotation) was
+  // returned here, which mirrored bounds of rotated objects.
   return new Float32Array([
     1 - (yy + zz),
-    xy + wz,
-    xz - wy,
     xy - wz,
-    1 - (xx + zz),
-    yz + wx,
     xz + wy,
+    xy + wz,
+    1 - (xx + zz),
     yz - wx,
+    xz - wy,
+    yz + wx,
     1 - (xx + yy),
   ]);
 };
