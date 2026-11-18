@@ -72,6 +72,15 @@ surfaces, or where objects look pasted on.
    after a bake) aimed so it actually enters through the openings (direction from
    the opening to a floor spot inside). Control overall brightness with exposure,
    not by weakening the sun.
+
+   **Check the sun's direction visually** before baking: compute the rotation,
+   apply it, and ask the user (or look) whether the light falls where planned,
+   e.g. on the windowsill and the floor inside the window. A wrongly signed
+   direction lights the scene from exactly the opposite side; then rotate the sun
+   object by 180° around Y (multiply its rotation by `[0, 1, 0, 0]` from the left).
+   Keep the sky material's `AtmosphericSky.direction` pointing towards the sun.
+   A late-afternoon angle (about 20-35° above the horizon) gives longer, more
+   interesting light shafts than a high noon sun.
 3b. **Point lights and spot lights do not contribute to the GI bake.** Only
    emissive surfaces (and the sky/environment) put light into the probes. For
    every light source that should light the room indirectly (torches, lamps,

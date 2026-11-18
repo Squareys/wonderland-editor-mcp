@@ -30,6 +30,26 @@ loops (`Sit_Chair_Idle`) for characters on chairs (place them on the chair and
 check the hips line up), and give characters different clips so the scene does
 not look cloned.
 
+## Blending between two animations
+
+Switching clips by replacing `animation` cuts hard. For smooth transitions
+(e.g. idle while the camera looks elsewhere, action when it looks at the
+character), use a 1D blend:
+
+1. On the `animation` component set
+   `{"blendType": "blend1D", "blendFactor": 0, "blendAnimations": {"animations": ["<idle id>", "<action id>"], "playbackSpeeds": [1, 1]}}`
+   (`modifyComponents`). The editor generates an animation graph per component;
+   the packaging log counts them ("Packaging N animation graphs").
+2. At runtime, set the graph's float parameter `blendFactor` (0 = first clip,
+   1 = second) from a component: `animation.setFloatParameter("blendFactor", x)`.
+   Ramp it over ~0.5 s instead of jumping.
+3. `scripts/shot-animation.js` in this skill does this based on the current shot of
+   a camera sequence (it reads `shot`, 1-based, from the `camera-sequence`
+   component); copy it into the project's `js/` folder.
+
+Give each character its own idle/action pair and different action shots, so
+they do not all move in sync.
+
 ## JavaScript components
 
 Project code lives in the project's source folder (the `scripting.components`
@@ -72,6 +92,10 @@ or `@wonderlandengine/components` already provides such a component (e.g.
 `mesh-particles`); otherwise write a small one (see "JavaScript components").
 The built-in `particleEffects` resource only has `mesh`, `material` and `maxCount`
 (1.6.1), so on its own it cannot make a moving flame; use mesh particles.
+
+For magic effects, make the motion read as magic, not as fire: orbiting,
+spiralling particles on tilted, counter-rotating rings (`scripts/magic-vortex.js`
+in this skill) instead of rising embers.
 
 Pair torch particles with a point light (direct light at runtime) and, when the
 project uses a GI probe volume, an emissive flame mesh (only for the bake; see

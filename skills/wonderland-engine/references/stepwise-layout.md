@@ -131,7 +131,10 @@ yaw = atan2(dx, dz) in radians               = atan2(-1.0, -2.0) = -2.678
 rotation = [0, sin(yaw/2), 0, cos(yaw/2)]    = [0, -0.973, 0, 0.230]
 ```
 
-The model's front is +Z. Apply `rotation` together with the position. Then check
+This assumes the model's front is +Z. Look up the asset's forward axis in your
+ledger first (it differs per asset; e.g. KayKit chairs face -X): for -X add
+90° (π/2) to yaw, for +X subtract 90°, for -Z add 180°. Apply `rotation`
+together with the position. Then check
 in a top-down screenshot that the front points at the target.
 
 ## Worksheet G: final overlap check (always, before saying "done")

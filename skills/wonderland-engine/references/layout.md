@@ -31,6 +31,11 @@ import's children and remove stray ones.
   arms and carried props, so the footprint is about 2.5-3 m wide, not the 0.6 m a
   standing person needs. Place them by measured bounds, keep the extra clearance
   in mind, and check them visually once their animation runs.
+- **Character packs attach every item variant.** KayKit characters (and many
+  others) come with all their weapons, shields and props attached to the hands
+  at once (e.g. a knight with two swords and four shields). Pick one set that
+  fits the character and its animation, and delete the other item objects
+  (find them with `query_scene_tree` on the character).
 - **Template containers stay at the origin.** Every imported file's container is a
   real object. Place every one of them or delete it; forgotten templates at
   (0, 0, 0) end up inside the scene (e.g. a wall standing in the table).
@@ -84,11 +89,14 @@ Common yaw quaternions `[x, y, z, w]`: 0° `[0,0,0,1]`, 45° `[0,0.3827,0,0.9239
 Characters and directional props (chairs, statues, signs) must face something
 sensible: the table, the room centre, the camera, each other.
 
-- glTF models face **+Z** in their own space (KayKit and most character packs).
-  Check it once per pack with a screenshot before rotating many objects.
-- To face a target point from position `p`:
+- **The forward axis differs per asset**, even within one pack: KayKit
+  characters face +Z, KayKit chairs face -X. Never assume it. For each kind of
+  directional asset, place one, look at it (screenshot, or ask the user), and
+  write its forward axis into your ledger before rotating copies.
+- With forward axis +Z, to face a target point from position `p`:
   `dx = target.x - p.x`, `dz = target.z - p.z`, `yaw = atan2(dx, dz)`,
-  rotation `[0, sin(yaw/2), 0, cos(yaw/2)]` on the container.
+  rotation `[0, sin(yaw/2), 0, cos(yaw/2)]`. For an asset whose forward axis is
+  -X, add 90° to `yaw`; for +X subtract 90°; for -Z add 180°.
 - Chairs face the table; a seated character uses the chair's yaw.
 - After rotating, re-measure the footprint (rotation changes it) and check the
   result visually from above (see the visual-check reference).
