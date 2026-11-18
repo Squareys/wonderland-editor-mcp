@@ -191,6 +191,9 @@ imports under it. It returns one entry per imported root:
   "bounds": { "min": [-1.98, -0.04, -3.58], "max": [1.98, 5.77, 3.58] } }
 ```
 
+`count` is the number of descendants of that root. It is 0 for a single-object
+root and for files with several roots. Do not use it as a node count of the file.
+
 The bounds are in the container's space. Place and scale the **container**
 (`containerId`), not the root. See the layout reference.
 

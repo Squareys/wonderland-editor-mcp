@@ -124,6 +124,8 @@ mkdir -p <project dir> && cd <project dir>
 WonderlandEditor --windowless --accept-eula --create --project "$PWD/<Name>.wlp"
 ```
 
+`--create` also starts a web server that watches `deploy/`.
+
 Use an absolute path for `--project`. The new project has no camera, and VR is
 enabled without eye objects, so the first packaging fails; you fix both in step 8.
 

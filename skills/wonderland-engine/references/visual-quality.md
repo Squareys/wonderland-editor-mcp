@@ -38,7 +38,7 @@ Apply in this order, saving after each step:
 | --- | --- | --- |
 | 1 | PBR materials | Before importing: `editor.importPhysicalAsPhongMaterials = false`. Otherwise glTF materials come in as Phong. For already imported materials, set `pipeline` to "Physical Opaque Textured"; their `Physical` values are already filled. |
 | 2 | Sky | Create a material on the "AtmosphericSky" pipeline (`AtmosphericSky.direction` is the sun direction, `exposure` ~0.5). Set `rendering.sky = {enabled: true, material: <id>}`. |
-| 3 | Environment lighting (image-based lighting) | `rendering.environment = {enabled: true, bakingMode: "sky", material: <same sky material>}` and pipeline feature `GLOBAL_ILLUMINATION`. The `material` is required, or packaging fails with "Environment is enabled, but a failure occurred during baking". |
+| 3 | Environment lighting (image-based lighting) | `rendering.environment = {enabled: true, bakingMode: "sky", material: <same sky material>}` and pipeline feature `GLOBAL_ILLUMINATION`. The `material` is required, or packaging fails with "Environment is enabled, but a failure occurred during baking". The first packaging after enabling it can fail even in a window; package again (see the `--bake env` note below). |
 | 4 | Sun | An object with a `light` component `{type: "sun", intensity: 3, shadows: true}`, rotated to match the sky's sun direction. Pipeline feature `SHADOW_PCF` softens shadows. |
 | 4b | Shadow distance | The sun's `shadowRange` (default 10 m) limits how far from the camera shadows render; beyond it they stop. Set it to the largest distance the camera can see inside the scene (e.g. the room diagonal plus a margin: a 12 x 12 m hall needs about 20 m). Keep `cascadeCount` 4 so near shadows stay sharp. Update it whenever the scene grows. |
 | 5 | Tonemapping | `rendering.hdr.tonemapping = "aces"` (or "khronos pbr neutral" for accurate product colors) and pipeline feature `TONEMAPPING`. Without the feature, bright areas clip. |
@@ -79,6 +79,17 @@ surfaces, or where objects look pasted on.
    direction lights the scene from exactly the opposite side; then rotate the sun
    object by 180° around Y (multiply its rotation by `[0, 1, 0, 0]` from the left).
    Keep the sky material's `AtmosphericSky.direction` pointing towards the sun.
+
+   **Compute both from the sun's elevation `e` and azimuth `a`.** Measure `a`
+   from +Z towards +X (a yaw angle). The vector towards the sun is
+   `s = [sin(a)*cos(e), sin(e), cos(a)*cos(e)]`.
+   - Set the sky material's `AtmosphericSky.direction` to `s`.
+   - The sun light must shine along `-s`. Rotate the sun object by yaw and pitch
+     so that its light axis points along `-s`. The light axis convention can
+     differ from what you expect, so check it visually (see above). If the scene
+     lights from the wrong side, rotate the sun object by 180° around Y.
+
+   `query_settings` has no fog setting in 1.6.1.
    A late-afternoon angle (about 20-35° above the horizon) gives longer, more
    interesting light shafts than a high noon sun.
 3b. **Point lights and spot lights do not contribute to the GI bake.** Only
@@ -163,10 +174,14 @@ surfaces, or where objects look pasted on.
 
    **Version control:** a plain `cache/` entry in `.gitignore` drops the bake. Pick
    one of two ways:
-   - Ignore `cache/` but commit the two files on purpose. In `.gitignore` use
+   - Ignore `cache/` but commit the bake files on purpose: `scenario.data.bin`
+     and `irradiance.bin` for GI, and `environment.bin` and
+     `environment-mip-*.png` for the sky environment. In `.gitignore` use
      `cache/*` and `!cache/<project-name>/`, then ignore the other files inside that
      folder if you do not want them. Adapt the lines to how the folder is named.
    - Re-bake in the window after every checkout.
+
+   Also ignore `.editor/` (editor UI state).
 
    The cache subfolder is named after the project (see pitfalls.md, "Renaming the
    project").
@@ -184,6 +199,13 @@ Note: `--bake env` does not support the sky baking mode on the command line. Sky
 environments bake during packaging, and only in an editor with a window; a
 windowless editor fails packaging with "Environment is enabled, but a failure
 occurred during baking". Work with a windowed editor for such projects.
+
+Even in an editor with a window, the first packaging after you enable the sky
+environment can still fail with that message. The bake runs within about a
+second; package again and it succeeds. A later windowless `--package` reuses the
+result from `cache/<project-name>/environment.bin` and
+`environment-mip-*.png`. Keep these files like the GI bake files (see "Version
+control" above).
 
 ## Day-night cycles and changing light at runtime
 

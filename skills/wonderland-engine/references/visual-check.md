@@ -57,7 +57,12 @@ the project's JavaScript components.
 
 Wonderland Editor 1.6.1 can crash ("munmap_chunk(): invalid pointer" right after
 "Reloading clients") when a slow client, e.g. a headless browser still loading
-the preview, is connected while a change triggers repackaging. Take screenshots
+the preview, is connected while a change triggers repackaging. The crash can
+also show as "Cork buffer must not be acquired without checking canCork!" during
+"Reloading clients". The user's own browser can trigger it too. Packaging can
+start without any MCP call from you (for example after file changes), so
+coordinate with the user: tell them when to open the preview, and change nothing
+while they look. Take screenshots
 only between edits: make your changes, `save_project`, wait for "Packaging
 successful!", then start the browser, capture, and **close it** before the next
 change. When you stop Chrome, match only your own instance
@@ -66,6 +71,7 @@ your own shell command.
 
 ## Known limits on Linux
 
+- Headless Chrome needs `DISPLAY` set, even with `--use-angle=gl`.
 - Headless Chrome with the GPU (ANGLE gl, egl, vulkan) can fail to compile the
   skinning shaders ("SkinningShader: linking shader failed") and shows only the
   page background.

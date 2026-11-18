@@ -144,7 +144,9 @@ in a top-down screenshot that the front points at the target.
    number of things you imported, find the missing ones first
    (`query_scene_tree` lists what is at the scene root).
 2. Call `find_overlaps` with `ignoreNameContains` = the floor's name (e.g.
-   `["floor", "ground"]`) and `minGap: 0.3`.
+   `["floor", "ground"]`) and `minGap: 0.3`. For modular kit tiles use
+   `minGap: 0` and a small `touchTolerance` instead (see layout.md, "Final
+   overlap check").
 3. For each reported pair, write one line:
 
 ```

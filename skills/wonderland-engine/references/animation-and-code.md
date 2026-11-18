@@ -90,6 +90,14 @@ export class MyComponent extends Component {
   bundling errors and the browser console (Playwright) for runtime errors.
 - Saving a code file repackages the project; see the "no browser connected"
   rule in visual-check.md.
+- **Check and test game logic without a browser.** The Flatpak's bundled Node
+  can syntax-check a file:
+  `flatpak run --command=node --filesystem=<project dir> com.wonderlandengine.editor --check js/file.js`.
+  For ES modules, `package.json` needs `"type": "module"`. Small Node scripts can
+  also simulate game logic (for example a whole race) to test it.
+- **`ViewComponent.fov` is the horizontal field of view in degrees.** three.js
+  uses a vertical one. When porting, convert with the aspect ratio:
+  `horizontal = 2 * atan(tan(vertical / 2) * aspect)`.
 
 ## Particles (fire, sparks, dust)
 

@@ -134,6 +134,14 @@ Before reporting a layout as done, and after every change that moves things:
 5. Characters need extra care: their bounds include weapons, capes and arms, and
    their pivot is often not at the feet's center. Place them by measured bounds.
 6. Take a screenshot from inside the room and look along the walls.
+7. Choose `minGap` by object kind. For grid-based modular kits (road, wall or
+   floor tiles) use `minGap: 0` between tiles: a positive `minGap` reports every
+   neighbour. Use `minGap` only for props and characters. Some kit tiles reach
+   slightly past their grid plate (Kenney City Builder pieces by about 0.05-0.07
+   units), so set a small `touchTolerance` (e.g. 0.1).
+8. AABB checks cannot test ring-shaped objects, such as a whole race track: its
+   box covers the inside of the ring. Check those by distance to their centre
+   line.
 
 Without `find_overlaps` (older plugin): call `compute_object_bounds` with the ids
 of all placed containers in one call and test every pair whose y-ranges overlap

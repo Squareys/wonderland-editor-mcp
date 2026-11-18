@@ -34,7 +34,8 @@ installing the plugin.
 ## Renaming the project
 
 - **The cache folder is named after the project** (`cache/<project-name>/`, e.g.
-  `cache/project/` for the default name). Changing `settings.project.name`
+  `cache/project/` for the default name). The folder name is the kebab-cased
+  project name: `RacetrackWLE` gives `cache/racetrack-wle/`. Changing `settings.project.name`
   moves it to a new, empty folder: the GI bake (`scenario.data.bin`,
   `irradiance.bin`) is no longer found, packaging fails with "Found probe volume
   scenario with no filename. Ensure it is compiled", and a publish during that
@@ -56,6 +57,9 @@ installing the plugin.
   ALL editor instances. Use it only when no other editor runs. Otherwise stop one
   editor by its process id: find it with `ss -ltnp | grep :<mcp port>` (Linux) and
   run `kill <pid>`. The process is named `Main`, so `pkill WonderlandEditor` misses it.
+- **An editor started with `--create` opens no ports**, so finding it by port
+  does not work. Its process is named `WonderlandEditor` (later instances show as
+  `Main`). Find it with `pgrep -f <project path>` and run `kill <pid>`.
 - **Linux, `--windowless` crashes with exit code 139** right after "Running in
   windowless mode": no X11 display. Set `DISPLAY`, or run under `xvfb-run -a`.
 - **Linux with NVIDIA, the editor crashes at startup** (after
