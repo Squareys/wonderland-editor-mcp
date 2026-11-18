@@ -43,3 +43,58 @@ export function loadCloudClient(): any {
   }
   return cloud;
 }
+
+/**
+ * How {@link uploadPage} picks between creating and updating a page:
+ * - `create`: create a new page,
+ * - `update`: update the existing page, never create one,
+ * - `auto`: update the page if it exists and is owned by the user (e.g. a
+ *   previous run created it without finishing), else create it.
+ */
+export type UploadMode = "create" | "update" | "auto";
+
+export interface UploadParams {
+  /** One-time Wonderland Cloud token */
+  token: string;
+  pageName: string;
+  deployPath: string;
+  workDir: string;
+  isPublic: boolean;
+  withThreads: boolean;
+  mode: UploadMode;
+  commanderUrl: string;
+}
+
+/** Page object as returned by the Wonderland Cloud API (fields we use) */
+export interface UploadedPage {
+  projectName: string;
+  projectDomain: string;
+  accessType: "public" | "unlisted";
+}
+
+/**
+ * Upload the deploy folder to Wonderland Cloud Pages. Has no dependency on
+ * the editor API, so it runs both in the editor and in the standalone
+ * publish worker.
+ */
+export async function uploadPage(params: UploadParams): Promise<UploadedPage> {
+  const { CloudClient } = loadCloudClient();
+  const client = new CloudClient(
+    {
+      WLE_CREDENTIALS: params.token,
+      WORK_DIR: params.workDir,
+      COMMANDER_URL: params.commanderUrl,
+    },
+    "page"
+  );
+  const { deployPath, pageName, isPublic, withThreads } = params;
+
+  let mode = params.mode;
+  if (mode === "auto") {
+    const existing = await client.page.get(pageName).catch(() => null);
+    mode = existing && existing.ownedByMe ? "update" : "create";
+  }
+  return mode === "update"
+    ? await client.page.update(deployPath, pageName, isPublic, withThreads)
+    : await client.page.create(deployPath, pageName, isPublic, withThreads);
+}

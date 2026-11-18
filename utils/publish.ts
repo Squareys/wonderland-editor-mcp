@@ -1,13 +1,21 @@
+import { execFile, spawn } from "node:child_process";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
+import { createInterface } from "node:readline";
+import { fileURLToPath } from "node:url";
 import { data, tools, workspace } from "@wonderlandengine/editor-api";
-import { loadCloudClient } from "./cloud-client.js";
+import {
+  uploadPage,
+  type UploadedPage,
+  type UploadParams,
+} from "./cloud-client.js";
 import { installExtraCaCertificates } from "./tls.js";
 
 const API_URL = "https://api.wonderlandengine.com";
 const COMMANDER_URL = "https://cloud.wonderland.dev";
 const POLL_INTERVAL_MS = 5000;
 const CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
+const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 
 /** Page names accepted by Wonderland Cloud (same rule as @wonderlandcloud/cli) */
 const PAGE_NAME_REGEX = /^[a-z](([a-z]|\d)-?([a-z]|\d)?){0,20}[a-z]$/;
@@ -217,41 +225,19 @@ async function run(
   const token = await pollToken(actionId);
   state = { ...state, status: "uploading", confirmUrl: undefined };
 
-  const { CloudClient } = loadCloudClient();
-  const client = new CloudClient(
-    { WLE_CREDENTIALS: token, WORK_DIR: workspace.root, COMMANDER_URL },
-    "page"
-  );
-  const isPublic = access === "public";
-
-  let page: any;
-  if (hasConfig) {
-    /* Never fall back to creating a new page for a published project */
-    page = await client.page.update(
-      workspace.deployPath,
-      pageName,
-      isPublic,
-      withThreads
-    );
-  } else {
-    /* A previous run may have created the page without finishing, e.g. if
-     * the editor closed during the upload. Adopt it instead of failing. */
-    const existing = await client.page.get(pageName).catch(() => null);
-    page =
-      existing && existing.ownedByMe
-        ? await client.page.update(
-            workspace.deployPath,
-            pageName,
-            isPublic,
-            withThreads
-          )
-        : await client.page.create(
-            workspace.deployPath,
-            pageName,
-            isPublic,
-            withThreads
-          );
-  }
+  const page = await upload({
+    token,
+    pageName,
+    deployPath: workspace.deployPath,
+    workDir: workspace.root,
+    isPublic: access === "public",
+    withThreads,
+    /* Never fall back to creating a new page for a published project. Without
+     * deployment.json, a previous run may have created the page without
+     * finishing, e.g. if the editor closed during the upload: adopt it. */
+    mode: hasConfig ? "update" : "auto",
+    commanderUrl: COMMANDER_URL,
+  });
 
   writeConfig(page, withThreads);
   state = {
@@ -290,6 +276,148 @@ function pollToken(actionId: string): Promise<string> {
 }
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const WORKER_PATH = fileURLToPath(new URL("./publish-worker.js", import.meta.url));
+
+/**
+ * Upload in a separate Node.js process if one is available, else in the
+ * editor's process. The editor's embedded Node.js only services its event
+ * loop between editor frames (rarely while the window is unfocused), which
+ * made compressing a 10 MB deploy folder take 23 s instead of 0.3 s.
+ */
+async function upload(params: UploadParams): Promise<UploadedPage> {
+  const node = existsSync(WORKER_PATH) ? await findNode() : null;
+  if (!node) {
+    console.log("[mcp][publish] no Node.js executable found, uploading in the editor");
+    return uploadPage(params);
+  }
+  console.log(`[mcp][publish] uploading with ${node}`);
+  return runWorker(node, params);
+}
+
+let nodeSearch: Promise<string | null> | null = null;
+
+/**
+ * Find a Node.js executable to run the publish worker with.
+ *
+ * The editor embeds Node.js as a library, so process.execPath is the editor's
+ * own executable (e.g. /app/bin/WonderlandEditor in the Flatpak,
+ * WonderlandEditor.exe on Windows), not a node binary. Editor installs ship a
+ * `node` launcher next to it or in a sibling `bin` folder (the Flatpak has
+ * /app/bin/node). If execPath already is a node binary, that is used. The
+ * last resort is `node` on PATH. Every candidate has to answer `--version`.
+ */
+function findNode(): Promise<string | null> {
+  if (!nodeSearch) nodeSearch = searchNode();
+  return nodeSearch;
+}
+
+async function searchNode(): Promise<string | null> {
+  const exe = process.platform === "win32" ? "node.exe" : "node";
+  const execDir = dirname(process.execPath);
+  const candidates: string[] = [];
+  if (/^node(\.exe)?$/i.test(basename(process.execPath)))
+    candidates.push(process.execPath);
+  candidates.push(join(execDir, exe), join(dirname(execDir), "bin", exe));
+  if (process.platform === "linux") candidates.push("/app/bin/node");
+
+  for (const candidate of new Set(candidates)) {
+    if (existsSync(candidate) && (await nodeVersion(candidate))) return candidate;
+  }
+  return (await nodeVersion("node")) ? "node" : null;
+}
+
+/** Version printed by `<path> --version`, or null if it does not run */
+function nodeVersion(path: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile(
+      path,
+      ["--version"],
+      { timeout: 10000, windowsHide: true },
+      (error, stdout) => {
+        const version = String(stdout ?? "").trim();
+        resolve(!error && /^v\d+\./.test(version) ? version : null);
+      }
+    );
+  });
+}
+
+/** Run utils/publish-worker.js and return the page it reports */
+function runWorker(node: string, params: UploadParams): Promise<UploadedPage> {
+  /* The token is only passed in the environment, never on the command line
+   * or in log output */
+  const redact = (line: string) => line.split(params.token).join("***");
+  const child = spawn(node, [WORKER_PATH], {
+    cwd: params.workDir,
+    env: {
+      ...process.env,
+      WLE_CREDENTIALS: params.token,
+      WLE_PUBLISH_PAGE_NAME: params.pageName,
+      WLE_PUBLISH_DEPLOY_PATH: params.deployPath,
+      WLE_PUBLISH_WORK_DIR: params.workDir,
+      WLE_PUBLISH_PUBLIC: params.isPublic ? "1" : "0",
+      WLE_PUBLISH_THREADS: params.withThreads ? "1" : "0",
+      WLE_PUBLISH_MODE: params.mode,
+      WLE_PUBLISH_COMMANDER_URL: params.commanderUrl,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+
+  let result: string | null = null;
+  let lastStderr = "";
+  createInterface({ input: child.stdout! }).on("line", (line) => {
+    if (line.startsWith("RESULT ") || line.startsWith("ERROR ")) {
+      result = line;
+    } else if (line.trim()) {
+      console.log("[mcp][publish]", redact(line));
+    }
+  });
+  createInterface({ input: child.stderr! }).on("line", (line) => {
+    if (!line.trim()) return;
+    lastStderr = redact(line);
+    console.log("[mcp][publish]", lastStderr);
+  });
+
+  return new Promise((resolve, reject) => {
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, UPLOAD_TIMEOUT_MS);
+
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      reject(new Error(`Could not start the upload process: ${e.message}`));
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (timedOut) {
+        reject(
+          new Error(
+            `Upload timed out after ${UPLOAD_TIMEOUT_MS / 60000} minutes. ` +
+              `Publish again to retry.`
+          )
+        );
+      } else if (result?.startsWith("RESULT ")) {
+        try {
+          resolve(JSON.parse(result.slice("RESULT ".length)));
+        } catch (e) {
+          reject(new Error(`Invalid upload result: ${redact(result)}`));
+        }
+      } else if (result?.startsWith("ERROR ")) {
+        reject(new Error(redact(result.slice("ERROR ".length))));
+      } else {
+        reject(
+          new Error(
+            `Upload process exited with code ${code} without a result` +
+              (lastStderr ? `: ${lastStderr}` : ".")
+          )
+        );
+      }
+    });
+  });
+}
 
 /**
  * Package the project and make sure the deploy folder is complete before it is

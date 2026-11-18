@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.1 (unreleased)
+
+### Changed
+
+- `publish_page` uploads in a separate Node.js process (much faster than inside
+  the editor). If no Node.js executable is found, it uploads in the editor as before.
+
+### Fixed
+
+- `duplicate_objects` no longer reports read-only `resourceId`/`resourceKey`
+  properties.
+
 ## 1.2.0
 
 ### Added
