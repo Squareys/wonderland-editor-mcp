@@ -176,6 +176,12 @@ WonderlandEditor --project "$PWD/<Name>.wlp" --enable-plugins
 
 **Windowless (headless, the user watches the browser preview):**
 
+Windowless editors cannot bake a sky environment or package a project with a
+baked GI probe volume. Use a window for projects that use either (most projects
+that follow the visual-quality baseline); windowless suits CI, packaging of
+simple projects and code-only work.
+
+
 ```sh
 WonderlandEditor --windowless --project "$PWD/<Name>.wlp" --enable-plugins --server --watch
 ```

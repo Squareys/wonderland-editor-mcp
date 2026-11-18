@@ -114,7 +114,9 @@ installing the plugin.
 - **All GI probes are black after a bake:** someone ran `--bake gi` on the command
   line. Bake again in the editor window.
 - **`--bake env` with the sky mode is not supported on the command line.** The sky
-  environment bakes during packaging instead.
+  environment bakes during packaging, but **only in an editor with a window**:
+  a windowless editor fails with "Environment is enabled, but a failure occurred
+  during baking". Use an editor with a window for projects with a sky environment.
 - **Textures missing or packaging fails with many large textures:** the texture
   atlas is full. Increase `rendering.textureAtlasSize` and
   `rendering.compressedTextureAtlasSize`. The atlas is a sparse virtual texture,

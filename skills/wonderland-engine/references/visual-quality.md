@@ -181,7 +181,9 @@ surfaces, or where objects look pasted on.
 1–2 m for large outdoor areas.
 
 Note: `--bake env` does not support the sky baking mode on the command line. Sky
-environments bake during packaging instead (step 3 of the baseline).
+environments bake during packaging, and only in an editor with a window; a
+windowless editor fails packaging with "Environment is enabled, but a failure
+occurred during baking". Work with a windowed editor for such projects.
 
 ## Day-night cycles and changing light at runtime
 
