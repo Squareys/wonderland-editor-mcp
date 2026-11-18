@@ -39,7 +39,7 @@ const jsComponentPropsByObjectType = new Map<string, any>();
 
 export const server = new McpServer({
   name: "Wonderland Editor",
-  version: "1.2.0",
+  version: "1.2.1",
 });
 let queue: WorkQueue | null = null;
 export function setQueue(q: WorkQueue) {
