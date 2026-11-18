@@ -14,7 +14,7 @@ import { installExtraCaCertificates } from "./tls.js";
 const API_URL = "https://api.wonderlandengine.com";
 const COMMANDER_URL = "https://cloud.wonderland.dev";
 const POLL_INTERVAL_MS = 5000;
-const CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
+const CONFIRM_TIMEOUT_MS = 15 * 60 * 1000;
 const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 
 /** Page names accepted by Wonderland Cloud (same rule as @wonderlandcloud/cli) */
